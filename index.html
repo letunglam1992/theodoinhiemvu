@@ -1563,9 +1563,9 @@ body{background:var(--bg)}
 .ab-panel .kpi-row::before,.ab-panel .kpi-row::after{grid-column:1/-1;color:var(--text-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .ab-panel .kpi-row::before{content:"Chỉ số điều hành";order:0}
 .ab-panel .kpi-row::after{content:"Kết quả hoàn thành";order:5;margin-top:5px;border-top:1px solid var(--border);padding-top:18px}
-.ab-panel .kpi-row .k-total{order:1}.ab-panel .kpi-row .k-inprogress{order:2}.ab-panel .kpi-row .k-overdue{order:3}.ab-panel .kpi-row .k-unknown{order:4}.ab-panel .kpi-row .k-no-deadline{order:4}
+.ab-panel .kpi-row .k-total{order:1}.ab-panel .kpi-row .k-inprogress{order:2}.ab-panel .kpi-row .k-overdue{order:3}.ab-panel .kpi-row .k-no-deadline{order:4}
 .ab-panel .kpi-row .k-early-done{order:6}.ab-panel .kpi-row .k-ontime{order:7}.ab-panel .kpi-row .k-late-done{order:8}.ab-panel .kpi-row .k-rate{order:9}
-.ab-panel .kpi-row .k-total,.ab-panel .kpi-row .k-inprogress,.ab-panel .kpi-row .k-overdue,.ab-panel .kpi-row .k-unknown,.ab-panel .kpi-row .k-no-deadline{border-color:var(--border-strong);box-shadow:var(--shadow-2)}
+.ab-panel .kpi-row .k-total,.ab-panel .kpi-row .k-inprogress,.ab-panel .kpi-row .k-overdue,.ab-panel .kpi-row .k-no-deadline{border-color:var(--border-strong);box-shadow:var(--shadow-2)}
 .ab-panel .kpi-row .k-no-deadline{--kpi-tone:var(--st-unknown);--badge-bg:var(--st-unknown-bg);--badge-fg:var(--st-unknown-fg)}
 .ab-panel .kpi-row .k-overdue{background:var(--st-overdue-bg);border-color:var(--st-overdue)}
 .ab-panel .kpi-row .k-overdue .kpi-value{color:var(--st-overdue-fg)}
@@ -3424,6 +3424,9 @@ function refreshStatusColors(){
 function ic(name, cls){ return `<svg class="ic${cls?' '+cls:''}" aria-hidden="true"><use href="#i-${name}"/></svg>`; }
 const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 const STATUS_ORDER = ['qua_han_chua_xong','dang_thuc_hien','chua_ro_han','khong_yeu_cau_han','hoan_thanh_qua_han','hoan_thanh_truoc_han','dung_han','hoan_thanh_chua_ro_ngay','hoan_thanh_khong_han','hoan_thanh_chua_ro_han'];
+// Biểu đồ trạng thái chỉ thể hiện nhóm có thời hạn hoặc đã xác nhận không yêu cầu hạn.
+// Nhiệm vụ chưa rõ hạn được đưa vào cảnh báo dành cho lãnh đạo.
+const STATUS_CHART_ORDER = STATUS_ORDER.filter(s=>s!=='chua_ro_han' && s!=='hoan_thanh_chua_ro_han');
 const RATE_STATUSES = ['dung_han','hoan_thanh_truoc_han','hoan_thanh_qua_han'];
 const NO_DEADLINE_MARKER = 'Không yêu cầu thời hạn';
 const UNKNOWN_DEADLINE_MARKER = 'Chưa xác định hạn';
@@ -3651,8 +3654,7 @@ function renderKPIs(prevSummary){
     {cls:'k-late-done', label:'Hoàn thành quá hạn', value:s.status_counts.hoan_thanh_qua_han||0, sub:Math.round((s.status_counts.hoan_thanh_qua_han||0)/(s.total||1)*100)+'% tổng số nhiệm vụ', delta: prevSummary?delta(s.status_counts.hoan_thanh_qua_han||0, prevSummary.status_counts.hoan_thanh_qua_han||0,'down'):'', filter:'hoan_thanh_qua_han'},
     {cls:'k-overdue', spark: sparkSVG(SP.backlog, SP.months, 'Số nhiệm vụ quá hạn tồn cuối tháng (ước tính từ ngày hoàn thành đã ghi)'), label:'Quá hạn - chưa xong', value:s.status_counts.qua_han_chua_xong||0, sub:Math.round((s.status_counts.qua_han_chua_xong||0)/(s.total||1)*100)+'% tổng số — cần xử lý ngay', delta: prevSummary?delta(s.status_counts.qua_han_chua_xong||0, prevSummary.status_counts.qua_han_chua_xong||0,'down'):'', filter:'qua_han_chua_xong'},
     {cls:'k-inprogress', label:'Đang thực hiện', value:s.status_counts.dang_thuc_hien||0, sub:'còn trong hạn quy định', delta:'', filter:'dang_thuc_hien'},
-    {cls:'k-unknown', label:'Chưa xác định hạn', value:(s.status_counts.chua_ro_han||0)+(s.status_counts.hoan_thanh_chua_ro_han||0), sub:'cần xác minh hạn hoặc xác nhận không yêu cầu hạn', delta:'', filter:'unknown_deadline'},
-    {cls:'k-no-deadline', label:'Không yêu cầu thời hạn', value:TASKS.filter(t=>t.no_deadline).length, sub:'đã xác nhận; không tính quá hạn', delta:'', filter:'no_deadline'},
+    {cls:'k-no-deadline', label:'Không yêu cầu thời hạn', value:s.status_counts.khong_yeu_cau_han||0, sub:'chưa hoàn thành; không tính quá hạn', delta:'', filter:'no_deadline'},
     {cls:'k-rate', label:'Tỷ lệ đúng hạn / đã hoàn thành', value:s.on_time_rate==null?'—':s.on_time_rate+'%', sub:TASKS.filter(t=>t.han_iso && t.ngay_hoan_thanh_iso && RATE_STATUSES.includes(t.status)).length+' nhiệm vụ có đủ hai ngày để đối chiếu', delta: prevSummary && s.on_time_rate!=null?delta(s.on_time_rate, prevSummary.on_time_rate,'up',1):'', filter:'__rank__'},
   ];
   document.getElementById('kpi-row').innerHTML = kpiDefs.map((k,i)=>`
@@ -3739,11 +3741,11 @@ function renderStatusChart(){
   charts.status = new Chart(document.getElementById('chart-status'), {
     type:'doughnut',
     data:{
-      labels: STATUS_ORDER.map(s=>STATUS_LABELS[s]),
-      datasets:[{ data: STATUS_ORDER.map(s=>SUMMARY.status_counts[s]||0), backgroundColor: STATUS_ORDER.map(s=>STATUS_COLORS[s]), borderColor: cssVar('--card', '#fff'), borderWidth:2, hoverOffset:4 }]
+      labels: STATUS_CHART_ORDER.map(s=>STATUS_LABELS[s]),
+      datasets:[{ data: STATUS_CHART_ORDER.map(s=>SUMMARY.status_counts[s]||0), backgroundColor: STATUS_CHART_ORDER.map(s=>STATUS_COLORS[s]), borderColor: cssVar('--card', '#fff'), borderWidth:2, hoverOffset:4 }]
     },
     options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
-      onClick:(evt, elements)=>{ if(elements.length){ drillToFilter(STATUS_ORDER[elements[0].index], null); } },
+      onClick:(evt, elements)=>{ if(elements.length){ drillToFilter(STATUS_CHART_ORDER[elements[0].index], null); } },
       onHover:(evt, elements)=>{ evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
       plugins:{ legend:{position:'bottom', labels:{usePointStyle:true, pointStyle:'rectRounded', padding:14, font:{size:12}}},
         tooltip:{callbacks:{label:(c)=>{ const total=c.dataset.data.reduce((a,b)=>a+b,0); const pct=(c.parsed/total*100).toFixed(1); return ` ${c.label}: ${c.parsed} (${pct}%)`; }}} }
@@ -3974,7 +3976,7 @@ function populateFilterOptions(){
   STATUS_ORDER.forEach(s=>{
     const o = document.createElement('option'); o.value=s; o.textContent=STATUS_LABELS[s]; statusSelect.appendChild(o);
   });
-  const noDueOption = document.createElement('option'); noDueOption.value='no_deadline'; noDueOption.textContent='Tất cả không yêu cầu thời hạn'; statusSelect.appendChild(noDueOption);
+  const noDueOption = document.createElement('option'); noDueOption.value='no_deadline'; noDueOption.textContent='Không yêu cầu thời hạn (chưa hoàn thành)'; statusSelect.appendChild(noDueOption);
   const unknownOption = document.createElement('option'); unknownOption.value='unknown_deadline'; unknownOption.textContent='Tất cả chưa xác định hạn'; statusSelect.appendChild(unknownOption);
   statusSelect.value = prevStatus;
   const assigneeSelect = document.getElementById('f-assignee');
@@ -4138,7 +4140,7 @@ function applyFilters(){
   const assignee = document.getElementById('f-assignee').value;
   currentData = TASKS.filter(t=>{
     if(unit && t.cq_chu_tri !== unit) return false;
-    if(status==='no_deadline' ? !t.no_deadline : status==='unknown_deadline' ? !!(t.no_deadline || t.han_iso) : status && t.status !== status) return false;
+    if(status==='no_deadline' ? t.status!=='khong_yeu_cau_han' : status==='unknown_deadline' ? !!(t.no_deadline || t.han_iso) : status && t.status !== status) return false;
     if(assignee && t.nguoi_phu_trach !== assignee) return false;
     if(q && !taskSearchHay(t).includes(q)) return false;
     for(const cf of activeCustomFilters){
@@ -9867,12 +9869,12 @@ window.__dashDebug = { getTasks: ()=>TASKS, getSummary: ()=>SUMMARY, getWizState
     const items=[];
     if(lead)items.push({label:'Tập trung quá hạn',title:`${lead.count} nhiệm vụ tại ${lead.name}`,
       detail:`Trễ lâu nhất ${lead.max} ngày. Đề nghị rà soát nguyên nhân và tiến độ xử lý.`,tone:'overdue',action:'Xem nhiệm vụ',kind:'unit-overdue',unit:lead.raw});
+    if(undated.length)items.push({label:'Cần xác minh thời hạn',title:`${undated.length} nhiệm vụ chưa xác định hạn`,
+      detail:'Cần xác nhận hạn hoàn thành hoặc xác nhận không yêu cầu thời hạn.',tone:'unknown',action:'Xem danh sách',kind:'undated'});
     if(overdue.length)items.push({label:'Quá hạn lâu nhất',title:overdue[0].task.noi_dung_vb||overdue[0].task.nhiem_vu||'Nhiệm vụ chưa có tên',
       detail:`${overdue[0].task.cq_chu_tri||'Chưa xác định đơn vị'} · Trễ ${overdue[0].days} ngày. Đề nghị cập nhật tiến độ.`,tone:'overdue',action:'Xem chi tiết',kind:'task',taskId:overdue[0].task.ma});
     if(upcoming.length)items.push({label:'Đến hạn trong 3 ngày',title:`${upcoming.length} nhiệm vụ cần theo dõi`,
       detail:'Xem danh sách theo hạn để đôn đốc trước thời điểm đến hạn.',tone:'upcoming',action:'Xem danh sách',kind:'upcoming'});
-    if(undated.length&&items.length<3)items.push({label:'Chưa rõ hạn',title:`${undated.length} nhiệm vụ chưa xác định hạn`,
-      detail:'Cần xác nhận hạn để theo dõi tiến độ chính xác.',tone:'unknown',action:'Xem danh sách',kind:'undated'});
     const list=document.getElementById('leader-focus-list');list.replaceChildren();
     if(!items.length){
       const empty=document.createElement('div');empty.className='leader-focus-empty';
@@ -9889,7 +9891,7 @@ window.__dashDebug = { getTasks: ()=>TASKS, getSummary: ()=>SUMMARY, getWizState
       card.appendChild(btn);list.appendChild(card);
     });
     const date=/^\d{4}-\d{2}-\d{2}$/.test(dataDate||'')?dataDate.slice(8)+'/'+dataDate.slice(5,7)+'/'+dataDate.slice(0,4):(dataDate||'chưa rõ');
-    document.getElementById('leader-focus-note').textContent=`Tiêu chí hiển thị: số nhiệm vụ, số ngày quá hạn và hạn trong 3 ngày; chưa đánh giá tầm quan trọng nghiệp vụ. Dữ liệu nguồn: ${date}.`;
+    document.getElementById('leader-focus-note').textContent=`Tiêu chí hiển thị: số nhiệm vụ, số ngày quá hạn, hạn trong 3 ngày và nhiệm vụ cần xác minh hạn; chưa đánh giá tầm quan trọng nghiệp vụ. Dữ liệu nguồn: ${date}.`;
   }
   window.__abRenderLeadership=renderLeadership;
   const nav=document.querySelectorAll('[data-ab-page]');
