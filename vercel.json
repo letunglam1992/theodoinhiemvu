@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/Dashboard_NhiemVu_DungChung_KPI_DaSua.html",
+      "destination": "/",
+      "permanent": false
+    }
+  ]
+}
