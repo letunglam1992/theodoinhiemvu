@@ -1,0 +1,16 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+const source=html.slice(html.indexOf('  async function doNewDocumentStatus(){'),html.indexOf('  async function doCalendarSync(){'));
+const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tests=[];let passed=0;
+function test(name,run){tests.push([name,run]);}
+async function ui(info,response){const out={innerHTML:''},btn={disabled:false},requests=[];const ctx={SyncQ:{ping:async()=>info,call:async r=>{requests.push(r);return response;},errText:s=>s},$:id=>id==='ss-newdoc-result'?out:btn,ic:()=>'',escH:escape,syncGid:()=> '123',Error,Number,String};vm.createContext(ctx);vm.runInContext(source,ctx);await ctx.doNewDocumentStatus();return {out,btn,requests};}
+test('all inline JavaScript and JSON blocks parse',()=>{for(const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)){if(m[1].includes('application/json'))JSON.parse(m[2]);else new vm.Script(m[2]);}});
+test('downloaded Apps Script equals embedded sample',()=>{assert.equal(JSON.parse(html.match(/id="apps-script-v2-code">([\s\S]*?)<\/script>/)[1]),fs.readFileSync(path.join(__dirname,'../gas-backend/Code.gs'),'utf8'));});
+test('configured status displays recipient and periodic schedule without sending',async()=>{const r=await ui({ok:true,version:5},{ok:true,enabled:true,email:'owner@example.com',intervalMinutes:5});assert.match(r.out.innerHTML,/Đã bật/);assert.match(r.out.innerHTML,/owner@example.com/);assert.equal(r.requests[0].action,'newDocumentStatus');assert.equal(r.requests[0].gid,'123');assert.equal(r.btn.disabled,false);});
+test('Apps Script v4 displays upgrade guidance and never calls unknown action',async()=>{const r=await ui({ok:true,version:4});assert.match(r.out.innerHTML,/phiên bản 5/);assert.equal(r.requests.length,0);});
+test('disabled status explains activation',async()=>{const r=await ui({ok:true,version:5},{ok:true,enabled:false,email:''});assert.match(r.out.innerHTML,/caiDatBaoVanBanMoi/);assert.match(r.out.innerHTML,/Chưa bật/);});
+test('connection failures display meaningful error and restore button',async()=>{const r=await ui({ok:false,message:'Network failed'});assert.match(r.out.innerHTML,/Network failed/);assert.equal(r.btn.disabled,false);assert.equal(r.requests.length,0);});
+test('status errors and recipient values are escaped',async()=>{const r=await ui({ok:true,version:5},{ok:true,enabled:true,email:'<script>bad</script>',lastError:'<img src=x>'});assert.doesNotMatch(r.out.innerHTML,/<script>|<img/);assert.match(r.out.innerHTML,/&lt;img/);});
+test('help, download and click handler refer to new feature',()=>{assert.match(html,/id="ss-newdoc-status"/);assert.match(html,/ss-newdoc-status'\).addEventListener\('click', doNewDocumentStatus/);assert.match(html,/Code_AppsScript_ThongBao_v5.gs/);assert.match(html,/caiDatBaoVanBanMoi/);});
+(async()=>{for(const [name,run]of tests){try{await run();passed++;console.log('PASS',name);}catch(e){console.error('FAIL',name,e);process.exitCode=1;}}console.log(`${passed} tests passed`);})();
