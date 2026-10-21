@@ -27,3 +27,21 @@ Gmail báo nhiệm vụ mới được đưa vào Google Sheet; Google Calendar 
 ## Kiểm thử
 
 Chạy `node tests/new-document-email.test.js` và `node tests/email-ui.test.js`. Các bài kiểm thử dùng Sheet/MailApp giả lập, không gửi email thật hoặc sửa Google Sheet thật. Mã Apps Script được nhúng trong dashboard phải trùng với `gas-backend/Code.gs`.
+
+## Chuyên đề KH 281 / Công văn 6429
+
+Menu **KH 281 / CV 6429** mở mục theo dõi riêng cho Phòng Kế hoạch - Tài chính. Có 21 phần việc được giao tại Mục II của Công văn 6429/SNNMT-KHTC ngày 21/10/2026 cho 8 phòng, chi cục; gồm cả các phần việc phối hợp, không phải 21 dự án/sản phẩm độc lập. Phần KHTC tại II.8.a được phân biệt với nhiệm vụ nghiên cứu của Chi cục Trồng trọt và BVTV tại II.3.c.
+
+Biểu Google Sheet: https://docs.google.com/spreadsheets/d/1GJDRd2jYhODy239vfDGwQR3pKPpCRIaHFGpyje_Y3gs/edit
+
+- `Cap nhat`: các đơn vị lọc đúng đơn vị và kỳ, nhập các cột E–V; KHTC ghi nhận xét ở X. Có 21 dòng/kỳ cho kế hoạch hành động, báo cáo năm 2026 và quý IV/2026. Kỳ tiếp theo KHTC sao chép nguyên dòng mẫu, đổi mã/kỳ và mở rộng bảng, không ghi đè lịch sử kỳ trước.
+- `Tong hop`: KHTC chọn kỳ tại B3 để theo dõi từng đơn vị; số hoàn thành là đơn vị tự khai và phải đối chiếu minh chứng.
+- `Nhiem vu`: danh mục và thời hạn nguyên văn, vai trò, sản phẩm theo công văn, căn cứ mục/trang. Phần công văn không nêu hạn hoặc sản phẩm riêng được ghi rõ; không tự đặt ngày hoàn thành cho nhiệm vụ thường xuyên/giai đoạn.
+- `Ky bao cao`: hạn đơn vị và KHTC tách riêng. Các ngày cuối 29/10, 26/11, ngày 04 hoặc 09 suy ra từ từ “trước” trong công văn, không tự dời sang ngày làm việc/quý sau.
+- `Huong dan`: hướng dẫn nhập, kiểm tra hồ sơ và chia sẻ. Chủ sở hữu cấp quyền Chỉnh sửa cho email các đơn vị; chưa tự gửi hoặc công bố tệp. Cột công thức và phần tổng hợp được bảo vệ. Các đơn vị vẫn có thể sửa các ô nhập liệu của nhau, vì đây là biểu dùng chung, không phải phân quyền theo đơn vị.
+
+Để đọc kết quả thật trên dashboard, cập nhật toàn bộ `gas-backend/Code.gs` vào Apps Script hiện dùng, giữ `MA_BI_MAT` cũ, Lưu và Triển khai **Phiên bản mới**, giữ URL Web App. Kiểm tra kết nối phải trả **phiên bản 6**. `ID_SHEET_KH281` đã điền sẵn, đọc riêng `Nhiem vu`, `Cap nhat`, `Ky bao cao`, không sửa danh sách nhiệm vụ hiện có. Web App đọc biểu dưới quyền người triển khai nên tài khoản đó cần có quyền truy cập biểu. Không cần xuất bản Google Sheet ra CSV công khai.
+
+Dashboard lấy dữ liệu khi mở mục hoặc bấm **Tải kết quả từ Sheet**, rồi tự tải lại mỗi 60 giây khi mục đang hiển thị. Dữ liệu chưa tải được đánh dấu rõ, không hiển thị kết quả khởi tạo như số liệu thực tế. Có lọc phần việc KHTC, lọc theo đơn vị/kỳ/trạng thái, kiểm tra minh chứng, hồ sơ khắc phục chậm tiến độ, nhận diện dòng trùng và xuất CSV tổng hợp theo kỳ/đơn vị. Biểu và API giới hạn 999 dòng cập nhật, cảnh báo nếu vượt.
+
+Chạy thêm `node tests/kh281.test.js` để kiểm tra nghiệp vụ chuyên đề và luồng đọc có xác thực. Dữ liệu nguồn được tóm lược từ công văn người dùng cung cấp; chưa có toàn văn KH 281 và biểu kèm theo để xác minh ngoài các STT được trích dẫn.

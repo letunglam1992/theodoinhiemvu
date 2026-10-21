@@ -1,0 +1,26 @@
+(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.KH281=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
+ 'use strict';
+ const STATUSES=['Chưa cập nhật','Chưa triển khai','Đang thực hiện','Hoàn thành','Chậm tiến độ'];
+ function text(v){return v==null?'':String(v).trim();}
+ function iso(v){const s=text(v);let m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/),y,mo,d;if(m){[,y,mo,d]=m;}else{m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(!m)return null;[,d,mo,y]=m;}const dt=new Date(Date.UTC(+y,+mo-1,+d));return +y>=1900&&+y<=9999&&dt.getUTCFullYear()===+y&&dt.getUTCMonth()===+mo-1&&dt.getUTCDate()===+d?`${y}-${String(+mo).padStart(2,'0')}-${String(+d).padStart(2,'0')}`:null;}
+ function percent(v){const s=text(v).replace(/\s/g,'').replace(',','.');if(!s)return null;const n=Number(s.replace('%',''));if(!Number.isFinite(n))return null;const p=s.includes('%')?n:n*100;return p>=0&&p<=100?p:null;}
+ function report(row){return {id:text(row[0]),period:text(row[1]),unit:text(row[2]),title:text(row[3]),goal:text(row[4]),product:text(row[5]),leader:text(row[6]),owner:text(row[7]),solution:text(row[8]),resources:text(row[9]),due:iso(row[10]),rawDue:text(row[10]),status:text(row[11])||'Chưa cập nhật',rawProgress:text(row[12]),progress:percent(row[12]),result:text(row[13]),proof:text(row[14]),difficulty:text(row[15]),responsibility:text(row[16]),remedy:text(row[17]),remedyDue:iso(row[18]),request:text(row[19]),updatedAt:iso(row[20]),rawUpdated:text(row[20]),updatedBy:text(row[21]),quality:text(row[22]),review:text(row[23])};}
+ function validate(r){if(!r||r.status==='Chưa cập nhật')return 'Chưa cập nhật';if(!STATUSES.includes(r.status))return 'Trạng thái không hợp lệ';if(r.rawProgress&&r.progress==null)return 'Tiến độ ngoài 0-100%';if(!r.result||!r.updatedAt||!r.updatedBy)return 'Thiếu kết quả/ngày/người cập nhật';if(r.rawDue&&!r.due)return 'Hạn đăng ký không hợp lệ';if(r.status==='Hoàn thành'&&(!r.proof||r.progress!==100))return 'Thiếu minh chứng hoặc tiến độ 100%';if(r.status==='Chậm tiến độ'&&(!r.difficulty||!r.responsibility||!r.remedy||!r.remedyDue))return 'Thiếu hồ sơ khắc phục';if(r.period==='Kế hoạch hành động 2026'&&[r.goal,r.product,r.leader,r.owner,r.solution,r.resources].some(v=>!v))return 'Thiếu kế hoạch 6 rõ';return 'Đủ dữ liệu';}
+ function fromSheet(response){
+  if(!response||!Array.isArray(response.tasks)||!Array.isArray(response.reports)||!Array.isArray(response.periods))throw Error('Dữ liệu chuyên đề không đúng cấu trúc.');
+  const tasks=response.tasks.slice(1).filter(r=>text(r[0])).map(r=>({id:text(r[0]),ref:text(r[1]),stt:text(r[2]),unit:text(r[3]),role:text(r[4]),title:text(r[5]),horizon:text(r[6]),product:text(r[7]),partners:text(r[8]),source:text(r[9])}));
+  if(new Set(tasks.map(t=>t.id)).size!==tasks.length)throw Error('Danh mục có mã nhiệm vụ trùng; KHTC cần kiểm tra.');
+  const reports=response.reports.slice(1).filter(r=>text(r[0])).map(report);
+  const periods=response.periods.slice(1).filter(r=>text(r[0])).map(r=>({name:text(r[0]),original:text(r[1]),unit_due:iso(r[2]),coordinator_original:text(r[3]),coordinator_due:iso(r[4])}));
+  return {tasks,reports,periods};
+ }
+ function build(tasks,reports,period,today){
+  const grouped=new Map(),warnings=[];for(const r of reports.filter(r=>r.period===period)){const a=grouped.get(r.id)||[];a.push(r);grouped.set(r.id,a);}
+  const ids=new Set(tasks.map(t=>t.id));for(const [id]of grouped)if(!ids.has(id))warnings.push('Mã không có trong danh mục: '+id);
+  const rows=tasks.map(t=>{const list=grouped.get(t.id)||[];const duplicate=list.length>1;if(duplicate)warnings.push('Trùng mã và kỳ: '+t.id);const r=duplicate?null:list[0]||null;const quality=duplicate?'Trùng mã và kỳ':validate(r);return {...t,report:r,quality,duplicate,updated:!!r&&r.status!=='Chưa cập nhật',done:!!r&&r.status==='Hoàn thành',late:!!(r&&(r.status==='Chậm tiến độ'||(r.due&&r.due<today&&r.status!=='Hoàn thành')))};});
+  const units=[...new Set(tasks.map(t=>t.unit))].map(unit=>{const rr=rows.filter(r=>r.unit===unit);return {unit,total:rr.length,updated:rr.filter(r=>r.updated).length,done:rr.filter(r=>r.done).length,late:rr.filter(r=>r.late).length,complete:rr.filter(r=>r.quality==='Đủ dữ liệu').length,missing:rr.filter(r=>r.quality!=='Đủ dữ liệu').length};});
+  return {rows,units,warnings,total:rows.length,updated:rows.filter(r=>r.updated).length,done:rows.filter(r=>r.done).length,missing:rows.filter(r=>r.quality!=='Đủ dữ liệu').length};
+ }
+ function csv(rows){const safe=v=>{let s=text(v);if(/^[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};const h=['Mã nhiệm vụ','Đơn vị','Nội dung','Thời hạn theo công văn','Trạng thái đơn vị khai','Tiến độ (%)','Kết quả','Minh chứng','Khó khăn','Trách nhiệm','Giải pháp khắc phục','Hạn khắc phục','Kiến nghị','Kiểm tra hồ sơ','Ý kiến KHTC'];return '\ufeff'+[h,...rows.map(t=>[t.id,t.unit,t.title,t.horizon,t.report?.status||'Chưa cập nhật',t.report?.progress??'',t.report?.result||'',t.report?.proof||'',t.report?.difficulty||'',t.report?.responsibility||'',t.report?.remedy||'',t.report?.remedyDue||'',t.report?.request||'',t.quality,t.report?.review||''])].map(r=>r.map(safe).join(',')).join('\r\n');}
+ return {STATUSES,iso,percent,report,validate,fromSheet,build,csv};
+});

@@ -1,7 +1,7 @@
 /**
  * =====================================================================================
  *  MÃ GOOGLE APPS SCRIPT — ĐỒNG BỘ 2 CHIỀU DASHBOARD ⇄ GOOGLE SHEET + EMAIL NHẮC HẠN
- *  Phiên bản giao thức: 5  (dashboard kiểm tra qua nút "Kiểm tra kết nối")
+ *  Phiên bản giao thức: 6  (dashboard kiểm tra qua nút "Kiểm tra kết nối")
  * =====================================================================================
  *
  *  HƯỚNG DẪN CÀI ĐẶT (7 BƯỚC — làm 1 lần, trên chính Google Sheet đang nhập liệu)
@@ -59,7 +59,8 @@ var CAU_HINH = {
   TEN_SHEET_LICH: 'Đồng bộ Calendar', // sheet ẩn để nhớ các sự kiện đã tạo
   TEN_COT_MA_LICH: 'Mã đồng bộ Calendar', // cột riêng, tự thêm và ẩn; không thay đổi A–O
   TEN_SHEET_BAO_MOI: 'Theo dõi báo văn bản mới', // sheet ẩn để chống gửi lại
-  TEN_COT_MA_BAO_MOI: 'Mã thông báo văn bản mới' // cột riêng, tự thêm và ẩn
+  TEN_COT_MA_BAO_MOI: 'Mã thông báo văn bản mới', // cột riêng, tự thêm và ẩn
+  ID_SHEET_KH281: '1GJDRd2jYhODy239vfDGwQR3pKPpCRIaHFGpyje_Y3gs' // Biểu riêng theo CV 6429; không thay tab nhiệm vụ hiện có
 };
 // Giá trị mặc định khi sheet "Cấu hình nhắc hạn" chưa có / để trống ô
 var MAC_DINH_NHAC_HAN = {
@@ -68,7 +69,7 @@ var MAC_DINH_NHAC_HAN = {
 };
 // =====================================================================
 
-var SCRIPT_VERSION = 5; // v5: email báo văn bản mới có thời hạn
+var SCRIPT_VERSION = 6; // v6: đọc biểu chuyên đề KH 281 / CV 6429 có xác thực
 
 // 15 cột của mẫu nhập liệu: field = tên trường dùng trong giao thức với dashboard
 var COT_DU_LIEU = [
@@ -344,6 +345,7 @@ function doPost(e) {
   catch (err) { return traJson_({ok: false, version: SCRIPT_VERSION, error: 'busy', message: 'Sheet đang bận, thử lại sau.'}); }
   try {
     var action = req.action || 'ping';
+    if (action === 'kh281Data') return traJson_(docChuyenDeKH281_());
     if (action === 'testReminder' || action === 'reminderPreview') {
       var kq = chayNhacHan_({previewOnly: action === 'reminderPreview', testTo: action === 'testReminder' ? String(req.email || '').trim() : ''});
       return traJson_(kq);
@@ -979,4 +981,37 @@ function huyBaoVanBanMoi() {
   });
   PropertiesService.getScriptProperties().setProperty('NEW_DOCUMENT_ENABLED', 'false');
   return n; // Giữ sổ đã gửi: bật lại không báo trùng các nhiệm vụ cũ.
+}
+
+// Đọc biểu chuyên đề riêng, sau kiểm tra mã bí mật tại doPost. Không công bố dữ liệu qua doGet.
+function docChuyenDeKH281_() {
+  if (!CAU_HINH.ID_SHEET_KH281) throw new Error('Chưa cấu hình ID_SHEET_KH281.');
+  var ss = SpreadsheetApp.openById(CAU_HINH.ID_SHEET_KH281);
+  function doc(name, width, firstHeader, maxRows) {
+    var sh = ss.getSheetByName(name);
+    if (!sh) throw new Error('Biểu KH 281 thiếu tab "' + name + '". Không đổi tên các tab mẫu.');
+    var last = sh.getLastRow();
+    if (last < 1) throw new Error('Tab "' + name + '" chưa có tiêu đề.');
+    var range = sh.getRange(1, 1, Math.min(last, maxRows), width);
+    var values = range.getDisplayValues();
+    // Ngày thực có thể đang hiển thị M/d/yyyy trong bảng Google. Dùng giá trị Date gốc,
+    // chuẩn hóa theo múi giờ dự án để không đảo ngày/tháng hoặc mất ngày trên dashboard.
+    var dateColumns = name === 'Cap nhat' ? [10, 18, 20] : name === 'Ky bao cao' ? [2, 4] : [];
+    if (dateColumns.length) {
+      var raw = range.getValues();
+      for (var i = 1; i < raw.length; i++) dateColumns.forEach(function (col) {
+        if (raw[i][col] instanceof Date && !isNaN(raw[i][col].getTime())) {
+          values[i][col] = Utilities.formatDate(raw[i][col], CAU_HINH.MUI_GIO, 'yyyy-MM-dd');
+        }
+      });
+    }
+    if (String(values[0][0]).trim() !== firstHeader) throw new Error('Tiêu đề tab "' + name + '" đã thay đổi; cần khôi phục cấu trúc biểu mẫu.');
+    return {values: values, truncated: last > maxRows};
+  }
+  var tasks = doc('Nhiem vu', 10, 'Mã nhiệm vụ', 1000);
+  var reports = doc('Cap nhat', 24, 'Mã nhiệm vụ', 1000);
+  var periods = doc('Ky bao cao', 6, 'Kỳ báo cáo', 1000);
+  return {ok: true, version: SCRIPT_VERSION, spreadsheetUrl: ss.getUrl(), tasks: tasks.values,
+    reports: reports.values, periods: periods.values, truncated: tasks.truncated || reports.truncated || periods.truncated,
+    fetchedAt: Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss')};
 }
