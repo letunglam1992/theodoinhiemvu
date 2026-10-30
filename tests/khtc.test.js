@@ -191,4 +191,11 @@ test('Apps Script: re-running repairs a sheet where v7 inserted the role column 
   assert.deepEqual(b.sheet.data[1].slice(15, 18), ['https://drive/x', 'Phòng chủ trì', 'cal-1']);
   assert.equal(b.ctx.caiDatTheoDoiKHTC().chuyenCotVaiTro, false, 'chạy lại không chuyển nữa');
 });
+test('Apps Script: keeps chosen layout P = Vai trò phòng, Q = Văn bản gốc on re-run', () => {
+  const b = backend([[...HEADERS, 'Vai trò phòng', 'Văn bản gốc', 'Mã đồng bộ Calendar'], [...row('A'), 'Phòng chủ trì', 'https://drive/x', 'cal-1']]);
+  const r = b.ctx.caiDatTheoDoiKHTC();
+  assert.equal(r.themCotVaiTro, false); assert.equal(r.cotVaiTro, 'P');
+  assert.deepEqual(b.sheet.data[0].slice(15, 18), ['Vai trò phòng', 'Văn bản gốc', 'Mã đồng bộ Calendar']);
+  assert.deepEqual(b.sheet.data[1].slice(15, 18), ['Phòng chủ trì', 'https://drive/x', 'cal-1']);
+});
 console.log(`${count} tests passed`);
