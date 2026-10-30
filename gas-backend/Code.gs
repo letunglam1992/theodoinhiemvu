@@ -30,8 +30,8 @@
  *     Chức năng lấy các dòng đang có làm mốc (không gửi thư cho dữ liệu cũ), sau đó quét mỗi 5 phút.
  *     Chỉ báo dòng mới có J là ngày hợp lệ, chưa có K/L; dòng chưa điền hạn sẽ chờ bổ sung.
  *     Muốn kiểm tra thủ công: chạy "chayBaoVanBanMoi"; muốn dừng: chạy "huyBaoVanBanMoi".
- *  9. Nhiệm vụ Phòng KHTC theo thành viên: chạy "caiDatTheoDoiKHTC" một lần. Hàm thêm cột "Vai trò phòng"
- *     sau cột "Văn bản gốc" (P, do ứng dụng quét iOffice ghi) hoặc sau Ghi chú (O) nếu chưa có cột đó, tạo tab "Cau hinh quet KHTC" (từ khóa + thành viên, tự sửa được) và tab chỉ xem
+ *  9. Nhiệm vụ Phòng KHTC theo thành viên: chạy "caiDatTheoDoiKHTC" một lần. Hàm thêm cột P "Vai trò phòng"
+ *     ngay sau cột Ghi chú (O), tạo tab "Cau hinh quet KHTC" (từ khóa + thành viên, tự sửa được) và tab chỉ xem
  *     "Theo doi phong KHTC" (tổng hợp theo thành viên bằng công thức). Chạy lại không ghi đè dữ liệu đã có.
  *
  *  LƯU Ý QUAN TRỌNG
@@ -1069,35 +1069,21 @@ function datCongThuc_(range, f) {
 function chuCot_(n) { var s = ''; while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
 function tenTabCongThuc_(ten) { return "'" + String(ten).replace(/'/g, "''") + "'"; }
 
-// Cột "Vai trò phòng" đặt SAU cột "Văn bản gốc" (cột P do ứng dụng Đồng bộ Nhiệm vụ iOffice ghi link; ứng dụng
-// chỉ ghi link khi P1 đúng là "Văn bản gốc"). Chưa có cột Văn bản gốc thì đặt ngay sau Ghi chú (O).
-// Bản v7 đầu tiên chèn vào P: chạy lại hàm sẽ chuyển cột về đúng chỗ, dữ liệu đi theo cột.
-var TEN_COT_VAN_BAN_GOC = 'Văn bản gốc';
-function timCotTheoTen_(bang, ten) {
-  var hang = bang.values[bang.headerRow - 1] || [], k = khongDau_(ten);
-  for (var i = 0; i < hang.length; i++) if (khongDau_(hang[i]) === k) return i + 1;
-  return 0;
-}
+// Thêm cột P "Vai trò phòng" ngay sau Ghi chú; các cột ẩn (Calendar, báo mới) dịch phải nhưng vẫn tìm theo tên.
 function damBaoCotVaiTro_(sheet) {
-  var bang = docBang_(sheet), themMoi = false, daChuyen = false;
-  var cotGoc = timCotTheoTen_(bang, TEN_COT_VAN_BAN_GOC);
+  var bang = docBang_(sheet), themMoi = false;
   if (!bang.map.vai_tro_phong) {
-    var sau = Math.max(bang.map.ghi_chu || 15, cotGoc);
+    var sau = bang.map.ghi_chu || 15;
     sheet.insertColumnAfter(sau);
     sheet.getRange(bang.headerRow, sau + 1).setValue('Vai trò phòng');
     themMoi = true;
-    bang = docBang_(sheet);
-  } else if (cotGoc && bang.map.vai_tro_phong < cotGoc) {
-    var c = chuCot_(bang.map.vai_tro_phong);
-    sheet.moveColumns(sheet.getRange(c + ':' + c), cotGoc + 1);
-    daChuyen = true;
     bang = docBang_(sheet);
   }
   var col = bang.map.vai_tro_phong, soDong = Math.max(sheet.getMaxRows() - bang.headerRow, 1);
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(VAI_TRO_PHONG, true).setAllowInvalid(false)
     .setHelpText('Để trống = Cá nhân tham mưu (nhiệm vụ giao riêng người tham mưu).').build();
   sheet.getRange(bang.headerRow + 1, col, soDong, 1).setDataValidation(rule);
-  return {bang: bang, themMoi: themMoi, daChuyen: daChuyen};
+  return {bang: bang, themMoi: themMoi};
 }
 
 function taoTabCauHinhKHTC_(ss) {
@@ -1189,7 +1175,7 @@ function caiDatTheoDoiKHTC() {
   var cot = damBaoCotVaiTro_(sheet);
   var cfg = taoTabCauHinhKHTC_(ss);
   var view = taoTabTheoDoiKHTC_(ss, cot.bang);
-  var kq = {ok: true, version: SCRIPT_VERSION, themCotVaiTro: cot.themMoi, chuyenCotVaiTro: cot.daChuyen, cotVaiTro: chuCot_(cot.bang.map.vai_tro_phong),
+  var kq = {ok: true, version: SCRIPT_VERSION, themCotVaiTro: cot.themMoi, cotVaiTro: chuCot_(cot.bang.map.vai_tro_phong),
             taoCauHinh: cfg.created, taoTheoDoi: view.created, cuPhapCongThuc: view.cuPhap};
   Logger.log(JSON.stringify(kq));
   return kq;
