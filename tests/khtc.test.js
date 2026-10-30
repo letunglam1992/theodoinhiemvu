@@ -29,6 +29,8 @@ class Sheet {
       setValues(values) { for (let i = 0; i < height; i++) for (let j = 0; j < width; j++) { sh.data[row + i - 1] ??= []; sh.data[row + i - 1][col + j - 1] = values[i][j]; } return this; },
       setValue(v) { sh.data[row - 1] ??= []; sh.data[row - 1][col - 1] = v; return this; },
       setFormula(f) { sh.formulas[row + ',' + col] = f; return this; },
+      getDisplayValue() { const f = sh.formulas[row + ',' + col] || ''; return sh.chamPhay && /,/.test(f.replace(/"[^"]*"|'[^']*'/g, '')) ? '#ERROR!' : ''; },
+      getSheet() { return sh; }, getA1Notation() { return 'R' + row + 'C' + col; },
       setNumberFormat() { return this; },
       setDataValidation(rule) { sh.validations.push({row, col, height, rule}); return this; }
     };
@@ -36,10 +38,10 @@ class Sheet {
 }
 const HEADERS = ['STT', 'Số ký hiệu', 'Trích yếu', 'Loại văn bản', 'Cơ quan ban hành', 'Ngày tháng năm ban hành', 'Nội dung nhiệm vụ', 'Phòng, đơn vị chủ trì', 'Phòng, đơn vị phối hợp', 'Hạn hoàn thành', 'Số văn bản hoàn thành', 'Ngày tháng năm hoàn thành', 'Người tham mưu', 'Lý do chậm', 'Ghi chú'];
 const row = (nv, extra = {}) => Object.assign(['1', '12/UBND', 'Trích yếu ' + nv, 'Công văn', 'UBND tỉnh', '01/10/2026', nv, 'Phòng Kế hoạch - Tài chính', '', '20/11/2026', '', '', 'Lê Tùng Lâm', '', 'iOffice-den:1'], extra);
-function backend(data) {
+function backend(data, chamPhay = false) {
   const sheet = new Sheet('Danh sach nhiem vu', 123, data);
   const sheets = [sheet]; let counter = 10;
-  const ss = {getSheets: () => sheets, getSheetByName: n => sheets.find(s => s.name === n), insertSheet: n => { const s = new Sheet(n, ++counter); sheets.push(s); return s; }};
+  const ss = {getSheets: () => sheets, getSheetByName: n => sheets.find(s => s.name === n), insertSheet: n => { const s = new Sheet(n, ++counter); s.chamPhay = chamPhay; sheets.push(s); return s; }};
   const builder = () => { const b = {rule: {}}; b.requireValueInList = (v) => { b.rule.list = v; return b; }; b.requireValueInRange = (r) => { b.rule.range = r; return b; }; b.setAllowInvalid = () => b; b.setHelpText = () => b; b.build = () => b.rule; return b; };
   const ctx = {console, Date, Map, Object, JSON, String, Number, Math, Array, Error, Intl,
     SpreadsheetApp: {getActiveSpreadsheet: () => ss, flush() {}, newDataValidation: builder},
@@ -150,5 +152,23 @@ test('Apps Script: summary formulas balance parentheses and refer to the helper 
   assert.ok(fs.length >= 9);
   fs.forEach(f => assert.equal((f.match(/\(/g) || []).length, (f.match(/\)/g) || []).length, f));
   assert.match(view.formulas['4,3'], /'KHTC tinh toan'!\$M\$2:\$M,"Đang thực hiện"/);
+});
+test('Apps Script: Vietnamese-locale sheet gets semicolon formulas, strings and tab names untouched', () => {
+  const b = backend([HEADERS, row('A')], true);
+  const r = b.ctx.caiDatTheoDoiKHTC();
+  assert.equal(r.cuPhapCongThuc, 'dấu chấm phẩy');
+  const f = b.ss.getSheetByName('KHTC tinh toan').formulas['2,1'];
+  assert.doesNotMatch(f.replace(/"[^"]*"|'[^']*'/g, ''), /,/);
+  assert.match(f, /"\^\\d\{1,2\}\/\\d\{1,2\}/, 'giữ dấu phẩy trong biểu thức chính quy');
+  Object.values(b.ss.getSheetByName('Theo doi phong KHTC').formulas).forEach(x => assert.doesNotMatch(x.replace(/"[^"]*"|'[^']*'/g, ''), /,/));
+});
+test('Apps Script: LET/LAMBDA names cannot be mistaken for cell references', () => {
+  const b = backend([HEADERS, row('A')]);
+  b.ctx.caiDatTheoDoiKHTC();
+  const all = [b.ss.getSheetByName('KHTC tinh toan').formulas['2,1'], ...Object.values(b.ss.getSheetByName('Theo doi phong KHTC').formulas)].join(' ');
+  const names = [...all.matchAll(/(?:LET|LAMBDA)\(([^()"]*?)(?=,(?:'|[A-Z]+\(|LEN|FILTER|TRIM|IF|MAP))/g)].flatMap(m => m[1].split(','));
+  [...all.matchAll(/LAMBDA\(([a-z_,]+),/g)].forEach(m => names.push(...m[1].split(',')));
+  assert.ok(names.length > 5);
+  names.forEach(n => assert.match(n, /_/, 'tên biến phải có dấu _: ' + n));
 });
 console.log(`${count} tests passed`);
