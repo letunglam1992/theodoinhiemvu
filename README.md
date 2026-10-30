@@ -24,9 +24,24 @@ Gmail báo nhiệm vụ mới được đưa vào Google Sheet; Google Calendar 
 - Lỗi gửi hoặc hết hạn mức giữ các nhiệm vụ chưa gửi để thử ở lượt sau; có nhật ký và trạng thái lỗi trên dashboard. Thời điểm nhận phụ thuộc lúc dữ liệu lên Sheet và lịch chạy của Google, không bảo đảm chính xác từng phút.
 - Giữ email nhắc hạn hiện có bằng `caiDatNhacHan`; lịch Google Calendar bằng `caiDatDongBoCalendar`. Hai lịch này độc lập với thông báo văn bản mới.
 
+## Nhiệm vụ Phòng KHTC theo thành viên (Apps Script v7)
+
+Theo dõi cả nhiệm vụ giao **Phòng Kế hoạch - Tài chính** (chủ trì, tham mưu, phối hợp) và người được phân công trong phòng (Thư, Kiên, Nhung, Tuấn, Hòa, Nga, Thực, Lâm), bên cạnh nhiệm vụ giao riêng người tham mưu.
+
+1. Thay `Code.gs` bằng [gas-backend/Code.gs](gas-backend/Code.gs) (giữ `MA_BI_MAT`), Lưu, **Triển khai → Phiên bản mới**. Kiểm tra kết nối phải trả **phiên bản 7**.
+2. Chọn hàm `caiDatTheoDoiKHTC` → **Chạy** một lần. Hàm:
+   - thêm cột **P “Vai trò phòng”** ngay sau Ghi chú (O), có danh sách chọn `Cá nhân tham mưu` / `Phòng chủ trì` / `Phòng tham mưu` / `Phòng phối hợp`. P trống được hiểu là `Cá nhân tham mưu`, nên dữ liệu cũ không phải sửa. Các cột ẩn của Calendar/báo mới dịch sang phải và vẫn được tìm theo tên;
+   - tạo tab **Cau hinh quet KHTC**: từ khóa giao phòng (A–C) và thành viên (E–H) để tác vụ quét iOffice đọc mỗi lượt; ô J4 là mốc kích hoạt (không quét bù trước mốc). **Điền cột “Họ tên đầy đủ trên iOffice”** cho từng đồng chí để tránh nhận nhầm người cùng tên;
+   - tạo tab chỉ xem **Theo doi phong KHTC** (tổng hợp theo thành viên + danh sách lọc theo người chọn ở K2) và tab ẩn **KHTC tinh toan** bằng công thức `LET/MAP/FILTER`. Không nhập tay vào hai tab này.
+   Chạy lại hàm không ghi đè cấu hình đã sửa; chỉ cập nhật lại công thức theo vị trí cột hiện tại.
+3. Trên dashboard, lần đồng bộ đầu sau khi thêm cột P sẽ mở bước xác nhận ánh xạ cột (cấu trúc Sheet đã đổi); kiểm tra cột “Vai trò phòng” rồi xác nhận.
+4. Menu **Phòng KHTC**: thẻ theo từng đồng chí (quá hạn, sắp hạn ≤ 3 ngày, đang làm, tỷ lệ đúng hạn), cụm **Chưa phân công**, biểu đồ theo người × trạng thái, danh sách và xuất Excel. Công tắc **Của tôi / Cả phòng** trên thanh đầu trang áp dụng cho Tổng quan, Nhiệm vụ, Phân tích, Báo cáo. Danh sách thành viên trên dashboard sửa ở cuối trang Phòng KHTC (lưu trên trình duyệt); nên giữ giống tab cấu hình trên Sheet.
+
+Cột M ghi tên gọi thành viên (vd `Kiên`), `Lê Tùng Lâm` hoặc `Chưa phân công`; tên ngoài danh sách được gộp vào nhóm “Khác”. Prompt tác vụ quét iOffice tương ứng nằm ở repo `phanmemquetvanban`.
+
 ## Kiểm thử
 
-Chạy `node tests/new-document-email.test.js` và `node tests/email-ui.test.js`. Các bài kiểm thử dùng Sheet/MailApp giả lập, không gửi email thật hoặc sửa Google Sheet thật. Mã Apps Script được nhúng trong dashboard phải trùng với `gas-backend/Code.gs`.
+Chạy `node tests/new-document-email.test.js`, `node tests/email-ui.test.js` và `node tests/khtc.test.js`. Các bài kiểm thử dùng Sheet/MailApp giả lập, không gửi email thật hoặc sửa Google Sheet thật. Mã Apps Script được nhúng trong dashboard phải trùng với `gas-backend/Code.gs`.
 
 ## Chuyên đề KH 281 / Công văn 6429
 
