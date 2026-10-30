@@ -1,7 +1,7 @@
 /**
  * =====================================================================================
  *  MÃ GOOGLE APPS SCRIPT — ĐỒNG BỘ 2 CHIỀU DASHBOARD ⇄ GOOGLE SHEET + EMAIL NHẮC HẠN
- *  Phiên bản giao thức: 6  (dashboard kiểm tra qua nút "Kiểm tra kết nối")
+ *  Phiên bản giao thức: 7  (dashboard kiểm tra qua nút "Kiểm tra kết nối")
  * =====================================================================================
  *
  *  HƯỚNG DẪN CÀI ĐẶT (7 BƯỚC — làm 1 lần, trên chính Google Sheet đang nhập liệu)
@@ -30,6 +30,9 @@
  *     Chức năng lấy các dòng đang có làm mốc (không gửi thư cho dữ liệu cũ), sau đó quét mỗi 5 phút.
  *     Chỉ báo dòng mới có J là ngày hợp lệ, chưa có K/L; dòng chưa điền hạn sẽ chờ bổ sung.
  *     Muốn kiểm tra thủ công: chạy "chayBaoVanBanMoi"; muốn dừng: chạy "huyBaoVanBanMoi".
+ *  9. Nhiệm vụ Phòng KHTC theo thành viên: chạy "caiDatTheoDoiKHTC" một lần. Hàm thêm cột P "Vai trò phòng"
+ *     ngay sau cột Ghi chú (O), tạo tab "Cau hinh quet KHTC" (từ khóa + thành viên, tự sửa được) và tab chỉ xem
+ *     "Theo doi phong KHTC" (tổng hợp theo thành viên bằng công thức). Chạy lại không ghi đè dữ liệu đã có.
  *
  *  LƯU Ý QUAN TRỌNG
  *  - KHÔNG xoá / đổi tên các cột tiêu đề của sheet dữ liệu (dòng 1). Mã tìm cột THEO TÊN tiêu đề nên vẫn đúng
@@ -60,7 +63,10 @@ var CAU_HINH = {
   TEN_COT_MA_LICH: 'Mã đồng bộ Calendar', // cột riêng, tự thêm và ẩn; không thay đổi A–O
   TEN_SHEET_BAO_MOI: 'Theo dõi báo văn bản mới', // sheet ẩn để chống gửi lại
   TEN_COT_MA_BAO_MOI: 'Mã thông báo văn bản mới', // cột riêng, tự thêm và ẩn
-  ID_SHEET_KH281: '1GJDRd2jYhODy239vfDGwQR3pKPpCRIaHFGpyje_Y3gs' // Biểu riêng theo CV 6429; không thay tab nhiệm vụ hiện có
+  ID_SHEET_KH281: '1GJDRd2jYhODy239vfDGwQR3pKPpCRIaHFGpyje_Y3gs', // Biểu riêng theo CV 6429; không thay tab nhiệm vụ hiện có
+  TEN_SHEET_CAU_HINH_KHTC: 'Cau hinh quet KHTC',   // từ khóa giao phòng + danh sách thành viên (người dùng tự sửa)
+  TEN_SHEET_THEO_DOI_KHTC: 'Theo doi phong KHTC',  // chỉ công thức, không nhập tay
+  TEN_SHEET_TINH_KHTC: 'KHTC tinh toan'            // sheet ẩn: bảng trung gian cho công thức tổng hợp
 };
 // Giá trị mặc định khi sheet "Cấu hình nhắc hạn" chưa có / để trống ô
 var MAC_DINH_NHAC_HAN = {
@@ -69,9 +75,10 @@ var MAC_DINH_NHAC_HAN = {
 };
 // =====================================================================
 
-var SCRIPT_VERSION = 6; // v6: đọc biểu chuyên đề KH 281 / CV 6429 có xác thực
+var SCRIPT_VERSION = 7; // v7: cột tùy chọn "Vai trò phòng" + theo dõi nhiệm vụ Phòng KHTC theo thành viên
 
-// 15 cột của mẫu nhập liệu: field = tên trường dùng trong giao thức với dashboard
+// 15 cột của mẫu nhập liệu + cột tùy chọn P: field = tên trường dùng trong giao thức với dashboard.
+// Cột tuyChon: thiếu tiêu đề thì không dự phòng theo vị trí (vị trí đó có thể là cột ẩn của Calendar/báo mới).
 var COT_DU_LIEU = [
   {field: 'stt',                 ten: 'STT',                          pos: 1,  alias: ['stt', 'tt', 'so thu tu']},
   {field: 'so_hieu_vb',          ten: 'Số ký hiệu',                   pos: 2,  alias: ['so ky hieu', 'so hieu van ban']},
@@ -87,8 +94,10 @@ var COT_DU_LIEU = [
   {field: 'ngay_hoan_thanh_iso', ten: 'Ngày tháng năm hoàn thành',    pos: 12, alias: ['ngay thang nam hoan thanh', 'ngay hoan thanh'], ngay: true},
   {field: 'nguoi_phu_trach',     ten: 'Người tham mưu',               pos: 13, alias: ['nguoi tham muu']},
   {field: 'delay_reason',        ten: 'Lý do chậm',                   pos: 14, alias: ['ly do cham']},
-  {field: 'ghi_chu',             ten: 'Ghi chú',                      pos: 15, alias: ['ghi chu']}
+  {field: 'ghi_chu',             ten: 'Ghi chú',                      pos: 15, alias: ['ghi chu']},
+  {field: 'vai_tro_phong',       ten: 'Vai trò phòng',                pos: 16, alias: ['vai tro phong'], tuyChon: true}
 ];
+var VAI_TRO_PHONG = ['Cá nhân tham mưu', 'Phòng chủ trì', 'Phòng tham mưu', 'Phòng phối hợp'];
 var TRUONG_GHI = COT_DU_LIEU.filter(function (c) { return c.field !== 'stt'; }).map(function (c) { return c.field; });
 
 // ------------------------------ Tiện ích chung ------------------------------
@@ -112,6 +121,7 @@ function chuanHoa_(v) {
   return s;
 }
 function khoa_(v) { return chuanHoa_(v).toLowerCase(); }
+function laCotTuyChon_(field) { return COT_DU_LIEU.some(function (c) { return c.field === field && c.tuyChon; }); }
 
 // ------------------------------ Đọc sheet dữ liệu ------------------------------
 function laySheetDuLieu_(gid) {
@@ -150,6 +160,7 @@ function docBang_(sheet) {
   Object.keys(map).forEach(function (f) { used[map[f]] = true; });
   COT_DU_LIEU.forEach(function (c) {
     if (map[c.field]) { headersFound.push(c.ten); return; }
+    if (c.tuyChon) return;
     missingHeaders.push(c.ten);
     if (!used[c.pos]) { map[c.field] = c.pos; used[c.pos] = true; }   // dự phòng theo vị trí A–O
   });
@@ -232,6 +243,7 @@ function actionUpdate_(bang, items) {
       var fields = it.fields || {}, base = it.base || {};
       Object.keys(fields).forEach(function (f) {
         if (TRUONG_GHI.indexOf(f) < 0) return;
+        if (!bang.map[f] && laCotTuyChon_(f)) return;   // Sheet chưa chạy caiDatTheoDoiKHTC: bỏ qua, không báo xung đột
         if (!bang.map[f]) { out.conflicts.push({field: f, sheetValue: null, yourValue: fields[f], reason: 'missing_column'}); return; }
         var hienTai = chuanHoa_(giaTri_(bang, vt.row, f));
         var moi = chuanHoa_(fields[f]);
@@ -1014,4 +1026,157 @@ function docChuyenDeKH281_() {
   return {ok: true, version: SCRIPT_VERSION, spreadsheetUrl: ss.getUrl(), tasks: tasks.values,
     reports: reports.values, periods: periods.values, truncated: tasks.truncated || reports.truncated || periods.truncated,
     fetchedAt: Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss')};
+}
+
+// =====================================================================================
+//  NHIỆM VỤ PHÒNG KHTC THEO THÀNH VIÊN — chạy caiDatTheoDoiKHTC một lần; chạy lại không ghi đè
+// =====================================================================================
+var KHTC_TU_KHOA_MAC_DINH = [
+  ['KHTC chủ trì', 'Chủ trì', 'Có'], ['Phòng KHTC chủ trì', 'Chủ trì', 'Có'],
+  ['Phòng Kế hoạch - Tài chính chủ trì', 'Chủ trì', 'Có'],
+  ['KHTC tham mưu', 'Tham mưu', 'Có'], ['KHTC tm', 'Tham mưu', 'Có'], ['P.KHTC tm', 'Tham mưu', 'Có'],
+  ['Phòng KHTC tham mưu', 'Tham mưu', 'Có'], ['Phòng Kế hoạch - Tài chính tham mưu', 'Tham mưu', 'Có'],
+  ['KHTC ph', 'Phối hợp', 'Có'], ['KHTC phối hợp', 'Phối hợp', 'Có']
+];
+var KHTC_THANH_VIEN_MAC_DINH = [
+  ['Lâm', 'Lê Tùng Lâm', 'Tùng Lâm', 'Có'], ['Thư', '', '', 'Có'], ['Kiên', '', '', 'Có'], ['Nhung', '', '', 'Có'],
+  ['Tuấn', '', '', 'Có'], ['Hòa', '', 'Hoà', 'Có'], ['Nga', '', '', 'Có'], ['Thực', '', '', 'Có']
+];
+var KHTC_TRANG_THAI = ['Đang thực hiện', 'Sắp đến hạn', 'Quá hạn', 'Hoàn thành đúng hạn', 'Hoàn thành trễ'];
+
+// Ghi công thức cú pháp tiếng Anh (dấu phẩy). Sheet đặt khu vực Việt Nam/Châu Âu có thể chỉ nhận dấu chấm phẩy:
+// nếu Sheets báo lỗi cú pháp (#ERROR!) thì ghi lại với dấu ; (trừ dấu phẩy trong chuỗi và tên tab).
+function doiSangChamPhay_(f) {
+  var out = '', trongChuoi = false, trongTen = false;
+  for (var i = 0; i < f.length; i++) {
+    var ch = f.charAt(i);
+    if (ch === '"' && !trongTen) trongChuoi = !trongChuoi;
+    else if (ch === "'" && !trongChuoi) trongTen = !trongTen;
+    out += (ch === ',' && !trongChuoi && !trongTen) ? ';' : ch;
+  }
+  return out;
+}
+function datCongThuc_(range, f) {
+  range.setFormula(f);
+  SpreadsheetApp.flush();
+  if (String(range.getDisplayValue()).indexOf('#ERROR') !== 0) return 'dấu phẩy';
+  range.setFormula(doiSangChamPhay_(f));
+  SpreadsheetApp.flush();
+  if (String(range.getDisplayValue()).indexOf('#ERROR') !== 0) return 'dấu chấm phẩy';
+  throw new Error('Google Sheets không nhận công thức tại ' + range.getSheet().getName() + '!' + range.getA1Notation() +
+    '. Di chuột vào ô đó để xem thông báo lỗi và gửi lại để điều chỉnh.');
+}
+function chuCot_(n) { var s = ''; while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+function tenTabCongThuc_(ten) { return "'" + String(ten).replace(/'/g, "''") + "'"; }
+
+// Thêm cột P "Vai trò phòng" ngay sau Ghi chú; các cột ẩn (Calendar, báo mới) dịch phải nhưng vẫn tìm theo tên.
+function damBaoCotVaiTro_(sheet) {
+  var bang = docBang_(sheet), themMoi = false;
+  if (!bang.map.vai_tro_phong) {
+    var sau = bang.map.ghi_chu || 15;
+    sheet.insertColumnAfter(sau);
+    sheet.getRange(bang.headerRow, sau + 1).setValue('Vai trò phòng');
+    themMoi = true;
+    bang = docBang_(sheet);
+  }
+  var col = bang.map.vai_tro_phong, soDong = Math.max(sheet.getMaxRows() - bang.headerRow, 1);
+  var rule = SpreadsheetApp.newDataValidation().requireValueInList(VAI_TRO_PHONG, true).setAllowInvalid(false)
+    .setHelpText('Để trống = Cá nhân tham mưu (nhiệm vụ giao riêng người tham mưu).').build();
+  sheet.getRange(bang.headerRow + 1, col, soDong, 1).setDataValidation(rule);
+  return {bang: bang, themMoi: themMoi};
+}
+
+function taoTabCauHinhKHTC_(ss) {
+  var ten = CAU_HINH.TEN_SHEET_CAU_HINH_KHTC, sh = ss.getSheetByName(ten);
+  if (sh) return {sheet: sh, created: false};
+  sh = ss.insertSheet(ten);
+  sh.getRange(1, 1).setValue('CẤU HÌNH QUÉT NHIỆM VỤ PHÒNG KẾ HOẠCH - TÀI CHÍNH (tác vụ quét iOffice đọc tab này mỗi lượt)');
+  sh.getRange(2, 1).setValue('Từ khóa trong bút phê lãnh đạo Sở (không phân biệt hoa thường/dấu). Thêm dòng mới hoặc đặt Bật = Không để tắt.');
+  sh.getRange(2, 5).setValue('Thành viên phòng. Điền Họ tên đầy đủ đúng như trên iOffice để tránh nhận nhầm; bí danh cách nhau bằng dấu ;');
+  sh.getRange(3, 1, 1, 3).setValues([['Từ khóa', 'Vai trò', 'Bật']]);
+  sh.getRange(4, 1, KHTC_TU_KHOA_MAC_DINH.length, 3).setValues(KHTC_TU_KHOA_MAC_DINH);
+  sh.getRange(3, 5, 1, 4).setValues([['Tên gọi', 'Họ tên đầy đủ trên iOffice', 'Bí danh khác', 'Đang công tác']]);
+  sh.getRange(4, 5, KHTC_THANH_VIEN_MAC_DINH.length, 4).setValues(KHTC_THANH_VIEN_MAC_DINH);
+  sh.getRange(3, 10, 1, 1).setValues([['Mốc kích hoạt quét KHTC']]);
+  sh.getRange(4, 10).setNumberFormat('@');
+  sh.getRange(4, 10).setValue(Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss'));
+  var coKhong = SpreadsheetApp.newDataValidation().requireValueInList(['Có', 'Không'], true).build();
+  sh.getRange(4, 2, 57, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['Chủ trì', 'Tham mưu', 'Phối hợp'], true).build());
+  sh.getRange(4, 3, 57, 1).setDataValidation(coKhong);
+  sh.getRange(4, 8, 27, 1).setDataValidation(coKhong);
+  sh.setFrozenRows(3);
+  return {sheet: sh, created: true};
+}
+
+// Công thức bảng trung gian: lọc dòng có Nội dung nhiệm vụ, quy người tham mưu về Tên gọi, tính trạng thái.
+// Tên biến LET/LAMBDA đặt dài, có dấu _ để không trùng địa chỉ ô hoặc tên hàm.
+function congThucTinhKHTC_(bang) {
+  var d = tenTabCongThuc_(bang.sheet.getName()), cfg = tenTabCongThuc_(CAU_HINH.TEN_SHEET_CAU_HINH_KHTC);
+  var r0 = bang.headerRow + 1;
+  function cot(field) { var c = chuCot_(bang.map[field]); return d + '!' + c + r0 + ':' + c; }
+  function loc(field) { return 'FILTER(' + cot(field) + ',loc_)'; }
+  var docNgay = 'LAMBDA(gt_,IF(ISNUMBER(gt_),gt_,LET(chuoi_,TRIM(TO_TEXT(gt_)),IF(REGEXMATCH(chuoi_,"^\\d{1,2}/\\d{1,2}/\\d{4}$"),' +
+    'DATE(VALUE(REGEXEXTRACT(chuoi_,"(\\d{4})$")),VALUE(REGEXEXTRACT(chuoi_,"^\\d{1,2}/(\\d{1,2})/")),VALUE(REGEXEXTRACT(chuoi_,"^(\\d{1,2})/"))),""))))';
+  var thanhVien = 'MAP(c_nguoi,LAMBDA(gt_m,LET(khoa_,LOWER(TRIM(gt_m)),IF(OR(khoa_="",khoa_="chưa phân công"),"Chưa phân công",' +
+    'IFERROR(INDEX(FILTER(ten_tv,LEN(TRIM(ten_tv))>0,((LOWER(TRIM(ten_tv))=khoa_)+(LOWER(TRIM(hoten_tv))=khoa_)+' +
+    'ISNUMBER(SEARCH(";"&khoa_&";",";"&LOWER(REGEXREPLACE(bidanh_tv&"","\\s*;\\s*",";"))&";")))>0),1),"Khác")))))';
+  var trangThai = 'MAP(c_han,c_sovb,c_ngayht,LAMBDA(gt_j,gt_k,gt_l,LET(han_,doc_ngay(gt_j),ngay_ht,doc_ngay(gt_l),' +
+    'IF(OR(LEN(TRIM(gt_k))>0,LEN(TRIM(gt_l))>0),IF(AND(ISNUMBER(han_),ISNUMBER(ngay_ht),ngay_ht>han_),"Hoàn thành trễ","Hoàn thành đúng hạn"),' +
+    'IF(NOT(ISNUMBER(han_)),"Đang thực hiện",IF(han_<TODAY(),"Quá hạn",IF(han_-TODAY()<=3,"Sắp đến hạn","Đang thực hiện")))))))';
+  return '=LET(nv_,' + cot('nhiem_vu') + ',loc_,LEN(TRIM(nv_))>0,doc_ngay,' + docNgay + ',' +
+    'ten_tv,' + cfg + '!E4:E30,hoten_tv,' + cfg + '!F4:F30,bidanh_tv,' + cfg + '!G4:G30,' +
+    'c_stt,' + loc('stt') + ',c_sh,' + loc('so_hieu_vb') + ',c_ty,' + loc('noi_dung_vb') + ',c_nv,FILTER(nv_,loc_),' +
+    'c_ct,' + loc('cq_chu_tri') + ',c_han,' + loc('han_iso') + ',c_sovb,' + loc('so_cv_hoan_thanh') + ',c_ngayht,' + loc('ngay_hoan_thanh_iso') + ',' +
+    'c_nguoi,' + loc('nguoi_phu_trach') + ',c_gc,' + loc('ghi_chu') + ',c_vt,' + loc('vai_tro_phong') + ',' +
+    'thanh_vien,' + thanhVien + ',vai_tro,MAP(c_vt,LAMBDA(gt_p,IF(LEN(TRIM(gt_p))=0,"Cá nhân tham mưu",TRIM(gt_p)))),trang_thai,' + trangThai + ',' +
+    'IFERROR(HSTACK(c_stt,c_sh,c_ty,c_nv,c_ct,c_han,c_sovb,c_ngayht,c_nguoi,c_gc,thanh_vien,vai_tro,trang_thai),""))';
+}
+
+function taoTabTheoDoiKHTC_(ss, bang) {
+  var tinh = ss.getSheetByName(CAU_HINH.TEN_SHEET_TINH_KHTC);
+  if (!tinh) tinh = ss.insertSheet(CAU_HINH.TEN_SHEET_TINH_KHTC);
+  tinh.getRange(1, 1, 1, 13).setValues([['STT', 'Số ký hiệu', 'Trích yếu', 'Nội dung nhiệm vụ', 'Chủ trì', 'Hạn hoàn thành',
+    'Số VB hoàn thành', 'Ngày hoàn thành', 'Người tham mưu', 'Ghi chú', 'Thành viên', 'Vai trò phòng', 'Trạng thái']]);
+  // Luôn cập nhật công thức theo vị trí cột hiện tại; bảng trung gian không chứa dữ liệu nhập tay.
+  var cuPhap = datCongThuc_(tinh.getRange(2, 1), congThucTinhKHTC_(bang));
+  var thieu = bang.sheet.getMaxRows() - tinh.getMaxRows();
+  if (thieu > 0) tinh.insertRowsAfter(tinh.getMaxRows(), thieu);
+  if (!tinh.isSheetHidden()) tinh.hideSheet();
+
+  var ten = CAU_HINH.TEN_SHEET_THEO_DOI_KHTC, sh = ss.getSheetByName(ten), created = !sh;
+  if (!sh) sh = ss.insertSheet(ten);
+  var t = tenTabCongThuc_(CAU_HINH.TEN_SHEET_TINH_KHTC) + '!', cfg = tenTabCongThuc_(CAU_HINH.TEN_SHEET_CAU_HINH_KHTC) + '!';
+  sh.getRange(1, 1).setValue('THEO DÕI NHIỆM VỤ PHÒNG KẾ HOẠCH - TÀI CHÍNH THEO THÀNH VIÊN (tự tính, không nhập tay)');
+  sh.getRange(2, 1).setValue('Nguồn: tab "' + bang.sheet.getName() + '". Sắp đến hạn = còn ≤ 3 ngày. Danh sách thành viên lấy từ tab "' + CAU_HINH.TEN_SHEET_CAU_HINH_KHTC + '".');
+  sh.getRange(3, 1, 1, 8).setValues([['Thành viên', 'Tổng', 'Đang thực hiện', 'Sắp đến hạn', 'Quá hạn', 'Hoàn thành đúng hạn', 'Hoàn thành trễ', 'Tỷ lệ đúng hạn']]);
+  datCongThuc_(sh.getRange(4, 1), '=LET(ten_tv,' + cfg + 'E4:E30,con_ct,' + cfg + 'H4:H30,ds_tv,IFERROR(FILTER(ten_tv,LEN(TRIM(ten_tv))>0,con_ct<>"Không"),"Lâm"),' +
+    'VSTACK(ds_tv,"Chưa phân công","Khác","Tổng cộng"))');
+  function dem(trangThai) {
+    return '=MAP($A$4:$A$40,LAMBDA(ten_,IF(ten_="","",COUNTIFS(' + t + '$K$2:$K,IF(ten_="Tổng cộng","?*",ten_),' + t + '$M$2:$M,"' + trangThai + '"))))';
+  }
+  datCongThuc_(sh.getRange(4, 2), dem('?*'));
+  KHTC_TRANG_THAI.forEach(function (s, i) { datCongThuc_(sh.getRange(4, 3 + i), dem(s)); });
+  datCongThuc_(sh.getRange(4, 8), '=MAP($A$4:$A$40,$F$4:$F$40,$G$4:$G$40,LAMBDA(ten_,dung_,tre_,IF(ten_="","",IF(N(dung_)+N(tre_)=0,"",N(dung_)/(N(dung_)+N(tre_))))))');
+  sh.getRange(4, 8, 37, 1).setNumberFormat('0%');
+
+  sh.getRange(2, 10).setValue('Chọn thành viên (để trống = tất cả):');
+  sh.getRange(2, 11).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(sh.getRange('A4:A40'), true).setAllowInvalid(false).build());
+  sh.getRange(3, 10, 1, 9).setValues([['STT', 'Số ký hiệu', 'Trích yếu', 'Nội dung nhiệm vụ', 'Vai trò phòng', 'Hạn hoàn thành', 'Trạng thái', 'Người tham mưu', 'Ghi chú']]);
+  datCongThuc_(sh.getRange(4, 10), '=IFERROR(FILTER(HSTACK(' + t + 'A2:A,' + t + 'B2:B,' + t + 'C2:C,' + t + 'D2:D,' + t + 'L2:L,' + t + 'F2:F,' + t + 'M2:M,' + t + 'I2:I,' + t + 'J2:J),' +
+    'LEN(' + t + 'K2:K)>0,((' + t + 'K2:K=$K$2)+OR($K$2="",$K$2="Tổng cộng"))>0),"Không có nhiệm vụ")');
+  sh.setFrozenRows(3);
+  return {sheet: sh, created: created, cuPhap: cuPhap};
+}
+
+function caiDatTheoDoiKHTC() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CAU_HINH.TEN_SHEET_DU_LIEU);
+  if (!sheet) throw new Error('Không tìm thấy tab dữ liệu "' + CAU_HINH.TEN_SHEET_DU_LIEU + '". Kiểm tra TEN_SHEET_DU_LIEU.');
+  var cot = damBaoCotVaiTro_(sheet);
+  var cfg = taoTabCauHinhKHTC_(ss);
+  var view = taoTabTheoDoiKHTC_(ss, cot.bang);
+  var kq = {ok: true, version: SCRIPT_VERSION, themCotVaiTro: cot.themMoi, cotVaiTro: chuCot_(cot.bang.map.vai_tro_phong),
+            taoCauHinh: cfg.created, taoTheoDoi: view.created, cuPhapCongThuc: view.cuPhap};
+  Logger.log(JSON.stringify(kq));
+  return kq;
 }
