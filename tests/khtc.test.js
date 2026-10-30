@@ -17,13 +17,17 @@ class Sheet {
   getLastRow() { let n = this.data.length; while (n && !this.data[n - 1].some(x => x !== '' && x != null)) n--; return n; }
   getLastColumn() { return Math.max(1, ...this.data.map(r => { let n = r.length; while (n && (r[n - 1] === '' || r[n - 1] == null)) n--; return n; })); }
   getMaxColumns() { return this.maxColumns; } getMaxRows() { return this.maxRows; }
+  moveColumns(spec, dest) {
+    const from = spec.col; // cột 1-based; dest: chèn trước cột dest (vị trí trước khi chuyển)
+    this.data.forEach(r => { while (r.length < Math.max(from, dest)) r.push(''); const [v] = r.splice(from - 1, 1); r.splice(dest > from ? dest - 2 : dest - 1, 0, v); });
+  }
   insertColumnAfter(col) { this.data.forEach(r => { if (r.length > col) r.splice(col, 0, ''); }); this.maxColumns++; }
   insertColumnsAfter(_, n) { this.maxColumns += n; }
   insertRowsAfter(_, n) { this.maxRows += n; }
   hideColumns() {} hideSheet() { this.hidden = true; } isSheetHidden() { return this.hidden; } setFrozenRows() {}
   getRange(row, col, height = 1, width = 1) {
     const sh = this;
-    if (typeof row === 'string') return {a1: row};
+    if (typeof row === 'string') { const m = row.match(/^([A-Z]+):\1$/); return m ? {col: [...m[1]].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0)} : {a1: row}; }
     return {
       getDisplayValues() { return Array.from({length: height}, (_, i) => Array.from({length: width}, (_, j) => String(sh.data[row + i - 1]?.[col + j - 1] ?? ''))); },
       setValues(values) { for (let i = 0; i < height; i++) for (let j = 0; j < width; j++) { sh.data[row + i - 1] ??= []; sh.data[row + i - 1][col + j - 1] = values[i][j]; } return this; },
@@ -170,5 +174,21 @@ test('Apps Script: LET/LAMBDA names cannot be mistaken for cell references', () 
   [...all.matchAll(/LAMBDA\(([a-z_,]+),/g)].forEach(m => names.push(...m[1].split(',')));
   assert.ok(names.length > 5);
   names.forEach(n => assert.match(n, /_/, 'tên biến phải có dấu _: ' + n));
+});
+test('Apps Script: role column goes after the scanner app link column P "Văn bản gốc"', () => {
+  const b = backend([[...HEADERS, 'Văn bản gốc', 'Mã đồng bộ Calendar'], [...row('A'), 'https://drive/x', 'cal-1']]);
+  const r = b.ctx.caiDatTheoDoiKHTC();
+  assert.equal(r.cotVaiTro, 'Q');
+  assert.deepEqual(b.sheet.data[0].slice(15, 18), ['Văn bản gốc', 'Vai trò phòng', 'Mã đồng bộ Calendar']);
+  assert.equal(b.sheet.data[1][15], 'https://drive/x');
+  assert.match(b.ss.getSheetByName('KHTC tinh toan').formulas['2,1'], /'Danh sach nhiem vu'!Q2:Q/);
+});
+test('Apps Script: re-running repairs a sheet where v7 inserted the role column before "Văn bản gốc"', () => {
+  const b = backend([[...HEADERS, 'Vai trò phòng', 'Văn bản gốc', 'Mã đồng bộ Calendar'], [...row('A'), 'Phòng chủ trì', 'https://drive/x', 'cal-1']]);
+  const r = b.ctx.caiDatTheoDoiKHTC();
+  assert.equal(r.chuyenCotVaiTro, true); assert.equal(r.themCotVaiTro, false); assert.equal(r.cotVaiTro, 'Q');
+  assert.deepEqual(b.sheet.data[0].slice(15, 18), ['Văn bản gốc', 'Vai trò phòng', 'Mã đồng bộ Calendar']);
+  assert.deepEqual(b.sheet.data[1].slice(15, 18), ['https://drive/x', 'Phòng chủ trì', 'cal-1']);
+  assert.equal(b.ctx.caiDatTheoDoiKHTC().chuyenCotVaiTro, false, 'chạy lại không chuyển nữa');
 });
 console.log(`${count} tests passed`);
