@@ -39,9 +39,19 @@ Theo dõi cả nhiệm vụ giao **Phòng Kế hoạch - Tài chính** (chủ tr
 
 Cột M ghi tên gọi thành viên (vd `Kiên`), `Lê Tùng Lâm` hoặc `Chưa phân công`; tên ngoài danh sách được gộp vào nhóm “Khác”. Prompt tác vụ quét iOffice tương ứng nằm ở repo `phanmemquetvanban`.
 
+## Trợ lý AI trong «Hỏi đáp dữ liệu»
+
+Nút bong bóng ở góc phải dưới mở khung hỏi đáp. Khi bật **Trả lời bằng AI**:
+
+1. Dashboard tự chọn tối đa 12 nhiệm vụ liên quan đến câu hỏi (từ khóa, tên người, quá hạn, sắp hạn, chưa phân công) và một khối số liệu tổng hợp, ngay trên trình duyệt.
+2. Gửi câu hỏi và các đoạn đó tới Cloudflare Worker dùng chung (mặc định `https://rasoatvanban.letunglam1992.workers.dev`, giao thức `{messages}` → `{text, model}`, cùng Worker với app Tra cứu TTHC đất đai). Mô hình chỉ được trả lời từ các đoạn đó và ghi nguồn `[n]`; bấm `[n]` để mở nhiệm vụ.
+3. Mất mạng hoặc Worker lỗi/hết hạn mức → tự trả lời bằng luật cố định như trước.
+
+Đổi địa chỉ Worker ở **Cấu hình AI** trong khung hỏi đáp (lưu trên trình duyệt). Câu hỏi và các nhiệm vụ liên quan được gửi tới Cloudflare Workers AI — giao diện nhắc không nhập thông tin cá nhân. Khóa API nằm ở Worker, không có trong dashboard.
+
 ## Kiểm thử
 
-Chạy `node tests/new-document-email.test.js`, `node tests/email-ui.test.js` và `node tests/khtc.test.js`. Các bài kiểm thử dùng Sheet/MailApp giả lập, không gửi email thật hoặc sửa Google Sheet thật. Mã Apps Script được nhúng trong dashboard phải trùng với `gas-backend/Code.gs`.
+Chạy `node tests/new-document-email.test.js`, `node tests/email-ui.test.js` `node tests/khtc.test.js` và `node tests/tro-ly-ai.test.js`. Các bài kiểm thử dùng Sheet/MailApp giả lập, không gửi email thật hoặc sửa Google Sheet thật. Mã Apps Script được nhúng trong dashboard phải trùng với `gas-backend/Code.gs`.
 
 ## Chuyên đề KH 281 / Công văn 6429
 
