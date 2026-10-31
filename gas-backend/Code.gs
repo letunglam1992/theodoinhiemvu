@@ -904,10 +904,8 @@ function trangThaiBaoVanBanMoi_(bang) {
     message: gid && !sameSheet ? 'Chức năng đang cài cho sheet khác; kiểm tra TEN_SHEET_DU_LIEU trong Apps Script.' : ''};
 }
 
-function emailVanBanMoi_(cfg, tasks) {
-  var content = '<p>Google Sheet vừa nhận <b>' + tasks.length + ' nhiệm vụ mới</b>, chưa ghi nhận hoàn thành.</p>';
-  tasks.forEach(function (t) {
-    content += '<div style="border:1px solid #e3e0d5;border-radius:8px;padding:12px;margin-bottom:12px">' +
+function theNhiemVu_(t) {
+  return '<div style="border:1px solid #e3e0d5;border-radius:8px;padding:12px;margin-bottom:12px">' +
       '<b>' + esc_(t.soHieu || 'Văn bản chưa có số ký hiệu') + '</b>' +
       '<p style="margin:6px 0">' + esc_(t.trichYeu || t.nhiemVu) + '</p>' +
       (t.trichYeu && t.nhiemVu ? '<p style="margin:6px 0"><b>Nhiệm vụ:</b> ' + esc_(t.nhiemVu) + '</p>' : '') +
@@ -917,7 +915,11 @@ function emailVanBanMoi_(cfg, tasks) {
       (t.vaiTro ? '<div><b>Vai trò phòng:</b> ' + esc_(t.vaiTro) + '</div>' : '') +
       '<div><b>Người tham mưu:</b> ' + esc_(t.nguoi || 'Chưa điền') + '</div>' +
       '<div style="margin-top:8px"><b>Hạn hoàn thành: ' + esc_(t.han || 'Chưa xác định') + '</b>' + (t.conLai === null ? '' : ' — ' + tinhTrang_(t.conLai)) + '</div></div>';
-  });
+}
+
+function emailVanBanMoi_(cfg, tasks) {
+  var content = '<p>Google Sheet vừa nhận <b>' + tasks.length + ' nhiệm vụ mới</b>, chưa ghi nhận hoàn thành.</p>';
+  tasks.forEach(function (t) { content += theNhiemVu_(t); });
   content += '<p>Thông báo này gửi khi phát hiện nhiệm vụ mới. Email nhắc hạn hằng ngày và Google Calendar vẫn hoạt động theo cấu hình riêng.</p>';
   var safeCfg = Object.assign({}, cfg);
   if (!/^https?:\/\//i.test(safeCfg.linkDashboard || '')) safeCfg.linkDashboard = '';
@@ -983,16 +985,105 @@ function chayBaoVanBanMoi() {
       SpreadsheetApp.flush();
       props.setProperty('NEW_DOCUMENT_LAST_SENT', at);
     }
+    var rieng = baoNguoiDuocGiao_(bang, reg, cfg, props, gid);
     props.setProperty('NEW_DOCUMENT_LAST_CHECK', Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss'));
     props.deleteProperty('NEW_DOCUMENT_LAST_ERROR');
     if (sent) ghiNhatKy_('Báo văn bản mới', sent, notified, 'Đã báo nhiệm vụ mới tới ' + cfg.emailVanBanMoi);
-    return {ok: true, version: SCRIPT_VERSION, sent: sent, notified: notified};
+    if (rieng.sent) ghiNhatKy_('Báo người được giao', rieng.sent, rieng.notified, 'Đã báo việc mới tới: ' + rieng.nguoi.join(', '));
+    return {ok: true, version: SCRIPT_VERSION, sent: sent, notified: notified, nguoiDuocGiao: rieng};
   } catch (err) {
     var msg = String(err && err.message || err);
     props.setProperty('NEW_DOCUMENT_LAST_ERROR', msg);
     ghiNhatKy_('Lỗi báo văn bản mới', sent, notified, msg);
     return {ok: false, version: SCRIPT_VERSION, sent: sent, notified: notified, error: msg};
   } finally { lock.releaseLock(); }
+}
+
+// ---------- Báo riêng người được giao (cột M) — email lấy ở tab Danh bạ ----------
+// Khóa sổ: «nguoi:<gid>:<mã dòng>:<tên>» → phân công lại cho người khác thì người mới cũng được báo; mỗi người một lần mỗi việc.
+// Lần đầu chạy: ghi mốc các phân công đang có (không gửi), tránh gửi hàng loạt việc cũ.
+function timLienHe_(ten, danhBa, thanhVien) {
+  var k = chuanTen_(ten);
+  if (!k) return null;
+  if (danhBa[k]) return danhBa[k];
+  // Cột M ghi tên gọi (vd «Kiên»), Danh bạ có thể ghi họ tên đầy đủ — đối chiếu qua tab «Cau hinh quet KHTC».
+  for (var i = 0; i < thanhVien.length; i++) {
+    var tv = thanhVien[i];
+    if (chuanTen_(tv.tenGoi) !== k && chuanTen_(tv.hoTen) !== k) continue;
+    return danhBa[chuanTen_(tv.tenGoi)] || danhBa[chuanTen_(tv.hoTen)] || null;
+  }
+  return null;
+}
+function docThanhVienKHTC_() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CAU_HINH.TEN_SHEET_CAU_HINH_KHTC);
+  if (!sh || sh.getLastRow() < 4) return [];
+  return sh.getRange(4, 5, Math.min(sh.getLastRow() - 3, 30), 2).getDisplayValues()
+    .map(function (r) { return {tenGoi: String(r[0] || '').trim(), hoTen: String(r[1] || '').trim()}; })
+    .filter(function (x) { return x.tenGoi || x.hoTen; });
+}
+function baoNguoiDuocGiao_(bang, reg, cfg, props, gid) {
+  var kq = {sent: 0, notified: 0, nguoi: []};
+  var danhBa = docDanhBa_(), thanhVien = docThanhVienKHTC_();
+  var col = layCotBaoMoi_(bang), n = Math.max(0, bang.values.length - bang.headerRow);
+  var ids = n ? bang.sheet.getRange(bang.headerRow + 1, col, n, 1).getDisplayValues() : [];
+  var mocDaCo = props.getProperty('ASSIGNEE_BASELINED_' + gid) === 'true';
+  var nowText = Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss');
+  var today = parseNgay_(Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy'));
+  var theoEmail = {};
+  for (var row = bang.headerRow + 1; row <= bang.values.length; row++) {
+    if (!dongCoDuLieu_(bang, row)) continue;
+    var id = String((ids[row - bang.headerRow - 1] || [])[0] || '').trim();
+    var ten = chuanHoa_(giaTri_(bang, row, 'nguoi_phu_trach'));
+    if (!id || !ten || /^chưa phân công$/i.test(ten)) continue;
+    var key = 'nguoi:' + gid + ':' + id + ':' + chuanTen_(ten);
+    if (reg.map[key]) continue;
+    var ghi = function (state) {
+      var r = reg.sheet.getLastRow() + 1;
+      reg.sheet.getRange(r, 1, 1, 4).setValues([[key, state, nowText, '']]);
+      reg.map[key] = {row: r, state: state};
+      return r;
+    };
+    if (!mocDaCo) { ghi('baseline'); continue; }
+    if (chuanHoa_(giaTri_(bang, row, 'so_cv_hoan_thanh')) || chuanHoa_(giaTri_(bang, row, 'ngay_hoan_thanh_iso'))) { ghi('completed'); continue; }
+    if (/phối hợp/i.test(chuanHoa_(giaTri_(bang, row, 'vai_tro_phong')))) { ghi('skipped'); continue; }
+    var lh = timLienHe_(ten, danhBa, thanhVien);
+    if (!lh || !lh.nhan || !laEmailHopLe_(lh.email)) continue; // chưa có email: chờ — khai Danh bạ sau vẫn được báo
+    if (lh.email.toLowerCase() === String(cfg.emailVanBanMoi || '').toLowerCase()) { ghi('self'); continue; } // đã nhận email tổng hợp
+    var noiDung = chuanHoa_(giaTri_(bang, row, 'nhiem_vu')), trichYeu = chuanHoa_(giaTri_(bang, row, 'noi_dung_vb'));
+    if (!noiDung && !trichYeu) continue;
+    var han = parseNgay_(giaTri_(bang, row, 'han_iso')), vaiTro = chuanHoa_(giaTri_(bang, row, 'vai_tro_phong'));
+    var e = lh.email.toLowerCase();
+    (theoEmail[e] = theoEmail[e] || {ten: lh.ten, email: lh.email, tasks: []}).tasks.push({key: key, soHieu: chuanHoa_(giaTri_(bang, row, 'so_hieu_vb')),
+      trichYeu: trichYeu, nhiemVu: noiDung, coQuan: chuanHoa_(giaTri_(bang, row, 'cq_giao')), ngayBanHanh: chuanHoa_(giaTri_(bang, row, 'ngay_ban_hanh')),
+      chuTri: chuanHoa_(giaTri_(bang, row, 'cq_chu_tri')), nguoi: ten, han: chuanHoa_(giaTri_(bang, row, 'han_iso')),
+      conLai: han === null ? null : Math.round((han - today) / 86400000), vaiTro: /^phòng tham mưu$/i.test(vaiTro) ? 'Phòng chủ trì' : vaiTro});
+  }
+  if (!mocDaCo) { props.setProperty('ASSIGNEE_BASELINED_' + gid, 'true'); SpreadsheetApp.flush(); return kq; }
+  Object.keys(theoEmail).forEach(function (e) {
+    var g = theoEmail[e];
+    for (var i = 0; i < g.tasks.length; i += 30) {
+      if (MailApp.getRemainingDailyQuota() < 1) throw new Error('Hết hạn mức gửi email hôm nay; báo người được giao sẽ thử lại sau.');
+      var batch = g.tasks.slice(i, i + 30);
+      var content = '<p>Kính gửi đồng chí <b>' + esc_(g.ten) + '</b>, đồng chí được giao tham mưu <b>' + batch.length + ' nhiệm vụ mới</b>:</p>';
+      batch.forEach(function (t) { content += theNhiemVu_(t); });
+      content += '<p>Thông báo tự động từ dashboard Điều hành nhiệm vụ khi cột «Người tham mưu» được giao cho đồng chí.</p>';
+      var safeCfg = Object.assign({}, cfg);
+      if (!/^https?:\/\//i.test(safeCfg.linkDashboard || '')) safeCfg.linkDashboard = '';
+      MailApp.sendEmail({to: g.email, subject: '[NHIỆM VỤ ĐƯỢC GIAO] ' + batch.length + ' nhiệm vụ mới — ' + cfg.tenDonVi,
+        body: batch.map(function (t) { return [t.soHieu, t.trichYeu, t.nhiemVu, 'Hạn hoàn thành: ' + (t.han || 'Chưa xác định')].filter(Boolean).join('\n'); }).join('\n\n'),
+        htmlBody: khungEmail_(safeCfg, 'Nhiệm vụ được giao', content), name: 'Điều hành nhiệm vụ — ' + cfg.tenDonVi});
+      var at = Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss');
+      batch.forEach(function (t) {
+        var r = reg.sheet.getLastRow() + 1;
+        reg.sheet.getRange(r, 1, 1, 4).setValues([[t.key, 'sent', nowText, at]]);
+        reg.map[t.key] = {row: r, state: 'sent'};
+      });
+      SpreadsheetApp.flush();
+      kq.sent++; kq.notified += batch.length;
+    }
+    kq.nguoi.push(g.ten);
+  });
+  return kq;
 }
 
 function huyBaoVanBanMoi() {

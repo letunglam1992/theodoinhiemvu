@@ -89,4 +89,33 @@ test('dữ liệu cũ «Phòng tham mưu» được báo và hiển thị là Ph
   assert.equal(e.ctx.chayBaoVanBanMoi().notified,1);
   assert.match(e.mails[0].htmlBody,/Vai trò phòng:<\/b> Phòng chủ trì/);
 });
+test('báo riêng người được giao (cột M, email ở Danh bạ): giao mới, phân công lại, chưa có email, việc cũ lúc bật, đã xong',()=>{
+  const e=envVaiTro([taskVT('Viec cu','20/11/2026','Phòng chủ trì',{12:'Kiên'})]);
+  e.ctx.caiDatBaoVanBanMoi();
+  const db=e.ss.getSheetByName('Danh bạ')||e.ss.insertSheet('Danh bạ');db.data=[['Người tham mưu','Email','Nhận nhắc'],['Thư','thu@example.com','Có'],['Nguyễn Văn Thực','thuc@example.com','Có'],['Kiên','kien@example.com','Có'],['Lê Tùng Lâm','owner@example.com','Có']];
+  const cfg=e.ss.insertSheet('Cau hinh quet KHTC');cfg.data=[[],[],['Tên gọi'],['','','','','Thực','Nguyễn Văn Thực']];
+  let r=e.ctx.chayBaoVanBanMoi();
+  assert.equal(r.nguoiDuocGiao.sent,0,'lần đầu: ghi mốc phân công đang có, không gửi việc cũ cho Kiên');
+  e.sheet.appendRow(taskVT('Viec cua Thu','','Phòng chủ trì',{12:'Thư'}));
+  e.sheet.appendRow(taskVT('Viec cua Nhung','','Phòng chủ trì',{12:'Nhung'}));
+  e.sheet.appendRow(taskVT('Viec cua Lam','','Cá nhân tham mưu',{12:'Lê Tùng Lâm'}));
+  r=e.ctx.chayBaoVanBanMoi();
+  const toThu=e.mails.filter(m=>m.to==='thu@example.com');
+  assert.equal(toThu.length,1);assert.match(toThu[0].subject,/NHIỆM VỤ ĐƯỢC GIAO/);assert.match(toThu[0].htmlBody,/Kính gửi đồng chí <b>Thư<\/b>/);assert.match(toThu[0].htmlBody,/Viec cua Thu/);
+  assert.equal(e.mails.filter(m=>m.to==='owner@example.com').length,1,'anh Lâm chỉ nhận thư tổng hợp, không nhận thêm thư riêng');
+  assert.ok(!e.mails.some(m=>m.to==='kien@example.com'),'việc cũ không gửi');
+  // Phân công lại Thư → Thực (cột M ghi tên gọi, Danh bạ ghi họ tên — đối chiếu qua tab cấu hình KHTC)
+  e.sheet.data[2][12]='Thực'; // dòng «Viec cua Thu»
+  r=e.ctx.chayBaoVanBanMoi();
+  assert.equal(e.mails.filter(m=>m.to==='thuc@example.com').length,1);
+  // Nhung chưa có email → chờ; khai Danh bạ sau thì được báo
+  db.data.push(['Nhung','nhung@example.com','Có']);
+  e.ctx.chayBaoVanBanMoi();
+  assert.equal(e.mails.filter(m=>m.to==='nhung@example.com').length,1);
+  // Không gửi lại
+  const n=e.mails.length;e.ctx.chayBaoVanBanMoi();assert.equal(e.mails.length,n);
+  // Việc đã xong khi được giao → không báo
+  e.sheet.appendRow(taskVT('Viec da xong','','Phòng chủ trì',{12:'Kiên',10:'12/BC'}));
+  e.ctx.chayBaoVanBanMoi();assert.ok(!e.mails.some(m=>m.to==='kien@example.com'));
+});
 console.log(`${count} tests passed`);
