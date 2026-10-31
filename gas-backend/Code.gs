@@ -97,7 +97,9 @@ var COT_DU_LIEU = [
   {field: 'ghi_chu',             ten: 'Ghi chú',                      pos: 15, alias: ['ghi chu']},
   {field: 'vai_tro_phong',       ten: 'Vai trò phòng',                pos: 16, alias: ['vai tro phong'], tuyChon: true}
 ];
-var VAI_TRO_PHONG = ['Cá nhân tham mưu', 'Phòng chủ trì', 'Phòng tham mưu', 'Phòng phối hợp'];
+// Chủ trì và tham mưu của phòng là một (chỉ đạo 01/11/2026): chỉ còn «Phòng chủ trì»; ô cũ «Phòng tham mưu» được đổi khi chạy caiDatTheoDoiKHTC.
+var VAI_TRO_PHONG = ['Cá nhân tham mưu', 'Phòng chủ trì', 'Phòng phối hợp'];
+var VAI_TRO_CU_THAM_MUU = 'Phòng tham mưu';
 var TRUONG_GHI = COT_DU_LIEU.filter(function (c) { return c.field !== 'stt'; }).map(function (c) { return c.field; });
 
 // ------------------------------ Tiện ích chung ------------------------------
@@ -1080,10 +1082,14 @@ function damBaoCotVaiTro_(sheet) {
     bang = docBang_(sheet);
   }
   var col = bang.map.vai_tro_phong, soDong = Math.max(sheet.getMaxRows() - bang.headerRow, 1);
+  // Đổi «Phòng tham mưu» → «Phòng chủ trì» (chỉ ô đúng giá trị cũ; ô khác giữ nguyên).
+  var vung = sheet.getRange(bang.headerRow + 1, col, soDong, 1), gt = vung.getValues(), doi = 0;
+  for (var i = 0; i < gt.length; i++) if (String(gt[i][0]).trim() === VAI_TRO_CU_THAM_MUU) { gt[i][0] = 'Phòng chủ trì'; doi++; }
+  if (doi) vung.setValues(gt);
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(VAI_TRO_PHONG, true).setAllowInvalid(false)
     .setHelpText('Để trống = Cá nhân tham mưu (nhiệm vụ giao riêng người tham mưu).').build();
   sheet.getRange(bang.headerRow + 1, col, soDong, 1).setDataValidation(rule);
-  return {bang: bang, themMoi: themMoi};
+  return {bang: bang, themMoi: themMoi, doiThamMuu: doi};
 }
 
 function taoTabCauHinhKHTC_(ss) {
@@ -1128,7 +1134,7 @@ function congThucTinhKHTC_(bang) {
     'c_stt,' + loc('stt') + ',c_sh,' + loc('so_hieu_vb') + ',c_ty,' + loc('noi_dung_vb') + ',c_nv,FILTER(nv_,loc_),' +
     'c_ct,' + loc('cq_chu_tri') + ',c_han,' + loc('han_iso') + ',c_sovb,' + loc('so_cv_hoan_thanh') + ',c_ngayht,' + loc('ngay_hoan_thanh_iso') + ',' +
     'c_nguoi,' + loc('nguoi_phu_trach') + ',c_gc,' + loc('ghi_chu') + ',c_vt,' + loc('vai_tro_phong') + ',' +
-    'thanh_vien,' + thanhVien + ',vai_tro,MAP(c_vt,LAMBDA(gt_p,IF(LEN(TRIM(gt_p))=0,"Cá nhân tham mưu",TRIM(gt_p)))),trang_thai,' + trangThai + ',' +
+    'thanh_vien,' + thanhVien + ',vai_tro,MAP(c_vt,LAMBDA(gt_p,IF(LEN(TRIM(gt_p))=0,"Cá nhân tham mưu",IF(TRIM(gt_p)="Phòng tham mưu","Phòng chủ trì",TRIM(gt_p))))),trang_thai,' + trangThai + ',' +
     'IFERROR(HSTACK(c_stt,c_sh,c_ty,c_nv,c_ct,c_han,c_sovb,c_ngayht,c_nguoi,c_gc,thanh_vien,vai_tro,trang_thai),""))';
 }
 
@@ -1175,7 +1181,7 @@ function caiDatTheoDoiKHTC() {
   var cot = damBaoCotVaiTro_(sheet);
   var cfg = taoTabCauHinhKHTC_(ss);
   var view = taoTabTheoDoiKHTC_(ss, cot.bang);
-  var kq = {ok: true, version: SCRIPT_VERSION, themCotVaiTro: cot.themMoi, cotVaiTro: chuCot_(cot.bang.map.vai_tro_phong),
+  var kq = {ok: true, version: SCRIPT_VERSION, themCotVaiTro: cot.themMoi, doiThamMuuThanhChuTri: cot.doiThamMuu, cotVaiTro: chuCot_(cot.bang.map.vai_tro_phong),
             taoCauHinh: cfg.created, taoTheoDoi: view.created, cuPhapCongThuc: view.cuPhap};
   Logger.log(JSON.stringify(kq));
   return kq;

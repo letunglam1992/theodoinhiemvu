@@ -26,6 +26,7 @@ class Sheet {
     if (typeof row === 'string') return {a1: row};
     return {
       getDisplayValues() { return Array.from({length: height}, (_, i) => Array.from({length: width}, (_, j) => String(sh.data[row + i - 1]?.[col + j - 1] ?? ''))); },
+      getValues() { return Array.from({length: height}, (_, i) => Array.from({length: width}, (_, j) => sh.data[row + i - 1]?.[col + j - 1] ?? '')); },
       setValues(values) { for (let i = 0; i < height; i++) for (let j = 0; j < width; j++) { sh.data[row + i - 1] ??= []; sh.data[row + i - 1][col + j - 1] = values[i][j]; } return this; },
       setValue(v) { sh.data[row - 1] ??= []; sh.data[row - 1][col - 1] = v; return this; },
       setFormula(f) { sh.formulas[row + ',' + col] = f; return this; },
@@ -126,7 +127,7 @@ test('Apps Script: setup inserts role column after notes, shifts hidden columns 
   let r = b.ctx.caiDatTheoDoiKHTC();
   assert.equal(r.themCotVaiTro, true); assert.equal(r.cotVaiTro, 'P'); assert.equal(r.taoCauHinh, true); assert.equal(r.taoTheoDoi, true);
   assert.equal(b.sheet.data[0][15], 'Vai trò phòng'); assert.equal(b.sheet.data[0][16], 'Mã đồng bộ Calendar'); assert.equal(b.sheet.data[1][16], 'cal-1');
-  assert.deepEqual([...b.sheet.validations[0].rule.list], ['Cá nhân tham mưu', 'Phòng chủ trì', 'Phòng tham mưu', 'Phòng phối hợp']);
+  assert.deepEqual([...b.sheet.validations[0].rule.list], ['Cá nhân tham mưu', 'Phòng chủ trì', 'Phòng phối hợp']);
   const cfg = b.ss.getSheetByName('Cau hinh quet KHTC');
   assert.equal(cfg.data[3][0], 'KHTC chủ trì'); assert.equal(cfg.data[3][4], 'Lâm'); assert.equal(cfg.data[3][5], 'Lê Tùng Lâm');
   assert.equal(cfg.data.slice(3).filter(x => x[4]).length, 8);
@@ -178,4 +179,16 @@ test('Apps Script: keeps chosen layout P = Vai trò phòng, Q = Văn bản gốc
   assert.deepEqual(b.sheet.data[0].slice(15, 18), ['Vai trò phòng', 'Văn bản gốc', 'Mã đồng bộ Calendar']);
   assert.deepEqual(b.sheet.data[1].slice(15, 18), ['Phòng chủ trì', 'https://drive/x', 'cal-1']);
 });
+
+test('chủ trì = tham mưu: dữ liệu cũ «Phòng tham mưu» hiển thị và tính là «Phòng chủ trì»; Apps Script đổi ô cũ', () => {
+  assert.equal(core.vaiTroPhong({vai_tro_phong: 'Phòng tham mưu'}), 'Phòng chủ trì');
+  assert.equal(core.VAI_TRO.includes('Phòng tham mưu'), false);
+  assert.doesNotMatch(html, /data-role="Phòng tham mưu"/);
+  const b = backend([[...HEADERS, 'Vai trò phòng'], [...row('A'), 'Phòng tham mưu'], [...row('B'), 'Cá nhân tham mưu']]);
+  const kq = b.ctx.caiDatTheoDoiKHTC();
+  assert.equal(kq.doiThamMuuThanhChuTri, 1);
+  assert.equal(b.sheet.data[1][15], 'Phòng chủ trì');
+  assert.equal(b.sheet.data[2][15], 'Cá nhân tham mưu');
+});
+
 console.log(`${count} tests passed`);
