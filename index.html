@@ -1687,6 +1687,26 @@ body{background:var(--bg)}
 .brand-badge.home-icon{border:1px solid rgba(255,255,255,.18);color:inherit}
 .home-icon:hover{filter:brightness(1.12)}
 .home-icon:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+/* Điện thoại (< 768px): header gọn, công cụ một hàng vuốt ngang, menu «Thêm» dạng tấm trượt dưới, nút trợ lý không đè nút menu. */
+@media(max-width:767px){
+  .topbar{padding:14px 14px 10px}
+  .topbar-inner{gap:8px}
+  .brand p{display:none}
+  .brand h1{font-size:20px;margin:2px 0 0}
+  .topbar-meta{font-size:12px}
+  .toolbar-btns{flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;margin:0 -14px;padding:2px 14px 4px;gap:6px}
+  .toolbar-btns::-webkit-scrollbar{display:none}
+  .toolbar-btns>*{flex-shrink:0}
+  .toolbar-btns .tbtn,.toolbar-btns .seg-btn{min-height:44px}
+  /* Nút hay dùng lên trước, vừa một màn hình 375px: phạm vi · Đồng bộ · Thêm; tìm/tải Excel/giao diện vuốt sang */
+  .toolbar-btns .scope-seg{order:0}#btn-sheetsync{order:1}.toolbar-btns .more-wrap{order:2}.toolbar-btns>*{order:3}
+  #btn-more>span,#btn-more>.ic-sm{display:none}#btn-more .ic-lead{display:inline-block}#btn-more{min-width:44px;justify-content:center}
+  .more-menu{position:fixed;left:12px;right:12px;top:auto;bottom:12px;min-width:0;max-height:70vh;overflow-y:auto;transform-origin:bottom center;z-index:200}
+  body:has(.more-menu.open) .chat-fab,body:has(.more-menu.open) .ab-mobile-toggle{display:none}
+  .more-menu .menu-item{min-height:44px}
+  .chat-fab{right:16px;bottom:76px}
+  .chat-panel{bottom:140px;height:min(640px,calc(100vh - 160px))}
+}
 </style>
 </head>
 <body>
@@ -1795,7 +1815,7 @@ body{background:var(--bg)}
         <button class="tbtn" id="btn-upload" type="button" title="Tải file Excel mới để cập nhật dữ liệu"><svg class="ic"><use href="#i-upload"/></svg><span class="lbl-opt">Tải Excel mới</span></button>
         <button class="tbtn tbtn-icon" id="btn-theme" type="button" title="Chuyển giao diện sáng/tối" aria-label="Chuyển sang chế độ tối"><svg class="ic"><use href="#i-moon"/></svg></button>
         <div class="more-wrap">
-          <button class="tbtn" id="btn-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu"><svg class="ic ic-lead"><use href="#i-more"/></svg><span>Thêm</span><svg class="ic ic-sm"><use href="#i-chevron-down"/></svg></button>
+          <button class="tbtn" id="btn-more" type="button" title="Thêm thao tác" aria-label="Thêm thao tác" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu"><svg class="ic ic-lead"><use href="#i-more"/></svg><span>Thêm</span><svg class="ic ic-sm"><use href="#i-chevron-down"/></svg></button>
           <div class="more-menu" id="more-menu" role="menu" aria-label="Các thao tác khác">
             <button class="menu-item" id="btn-print" type="button" role="menuitem" tabindex="-1"><svg class="ic"><use href="#i-printer"/></svg>Xuất báo cáo</button>
             <button class="menu-item" id="btn-present" type="button" role="menuitem" tabindex="-1"><svg class="ic"><use href="#i-present"/></svg>Chế độ trình chiếu</button>
