@@ -717,6 +717,7 @@ button.ai-cite:hover{text-decoration:underline}button.ai-cite:focus-visible{outl
   display:none;align-items:center;gap:10px;z-index:150;max-width:min(92vw,640px);
 }
 .toast.show{display:flex;animation:toastIn var(--dur-slow) var(--ease-out);}
+@keyframes toastInHep{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 .toast button{background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--r-sm);padding:6px 12px;font-size:var(--fs-12);font-weight:600;cursor:pointer;white-space:nowrap;}
 .toast .toast-x{display:inline-flex;align-items:center;background:none;color:var(--text-soft);padding:4px;}
@@ -1703,6 +1704,11 @@ body{background:var(--bg)}
   #btn-more>span,#btn-more>.ic-sm{display:none}#btn-more .ic-lead{display:inline-block}#btn-more{min-width:44px;justify-content:center}
   .more-menu{position:fixed;left:12px;right:12px;top:auto;bottom:12px;min-width:0;max-height:70vh;overflow-y:auto;transform-origin:bottom center;z-index:200}
   body:has(.more-menu.open) .chat-fab,body:has(.more-menu.open) .ab-mobile-toggle{display:none}
+  /* Thông báo (toast): rộng hết màn hình, nằm trên các nút nổi; ẩn nhắc sao lưu khi đang mở khung hỏi đáp */
+  .toast{left:12px;right:12px;transform:none;max-width:none;flex-wrap:wrap;bottom:136px}
+  .toast>span{flex:1 1 180px}
+  .toast.show{animation:toastInHep var(--dur-slow) var(--ease-out)}
+  body:has(.chat-panel.open) #backup-toast{display:none}
   .more-menu .menu-item{min-height:44px}
   .chat-fab{right:16px;bottom:76px}
   .chat-panel{bottom:140px;height:min(640px,calc(100vh - 160px))}
