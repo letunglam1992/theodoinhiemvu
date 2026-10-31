@@ -868,12 +868,18 @@ function thuThapDongBaoMoi_(bang, reg, baseline) {
     var han = parseNgay_(giaTri_(bang, row, 'han_iso'));
     var noiDung = chuanHoa_(giaTri_(bang, row, 'nhiem_vu'));
     var trichYeu = chuanHoa_(giaTri_(bang, row, 'noi_dung_vb'));
-    if (han === null || (!noiDung && !trichYeu)) continue; // Đợi công cụ nhập đủ nội dung và ngày thực.
+    // Việc giao Phòng chủ trì/tham mưu hoặc giao cá nhân (cột «Vai trò phòng» do ứng dụng quét iOffice ghi) → báo ngay,
+    // kể cả chưa có hạn. Việc phòng chỉ phối hợp không báo. Dòng không có vai trò (nhập tay) giữ quy tắc cũ: chờ có hạn.
+    var vaiTro = chuanHoa_(giaTri_(bang, row, 'vai_tro_phong'));
+    if (/phối hợp/i.test(vaiTro)) { reg.sheet.getRange(entry.row, 2).setValue('skipped'); entry.state = 'skipped'; continue; }
+    var baoNgay = /^(phòng (chủ trì|tham mưu)|cá nhân tham mưu)$/i.test(vaiTro);
+    if ((!baoNgay && han === null) || (!noiDung && !trichYeu)) continue; // Đợi công cụ nhập đủ nội dung và ngày thực.
     tasks.push({id: key, registryRow: entry.row, row: row,
       soHieu: chuanHoa_(giaTri_(bang, row, 'so_hieu_vb')), trichYeu: trichYeu, nhiemVu: noiDung,
       coQuan: chuanHoa_(giaTri_(bang, row, 'cq_giao')), ngayBanHanh: chuanHoa_(giaTri_(bang, row, 'ngay_ban_hanh')),
       chuTri: chuanHoa_(giaTri_(bang, row, 'cq_chu_tri')), nguoi: chuanHoa_(giaTri_(bang, row, 'nguoi_phu_trach')),
-      han: chuanHoa_(giaTri_(bang, row, 'han_iso')), conLai: Math.round((han - today) / 86400000)});
+      han: chuanHoa_(giaTri_(bang, row, 'han_iso')), conLai: han === null ? null : Math.round((han - today) / 86400000),
+      vaiTro: /tham mưu$/i.test(vaiTro) && /^phòng/i.test(vaiTro) ? 'Phòng chủ trì' : vaiTro});
   }
   SpreadsheetApp.flush(); // Lưu danh tính trước khi gửi email.
   return tasks;
@@ -899,7 +905,7 @@ function trangThaiBaoVanBanMoi_(bang) {
 }
 
 function emailVanBanMoi_(cfg, tasks) {
-  var content = '<p>Google Sheet vừa nhận <b>' + tasks.length + ' nhiệm vụ mới có thời hạn</b>, chưa ghi nhận hoàn thành.</p>';
+  var content = '<p>Google Sheet vừa nhận <b>' + tasks.length + ' nhiệm vụ mới</b>, chưa ghi nhận hoàn thành.</p>';
   tasks.forEach(function (t) {
     content += '<div style="border:1px solid #e3e0d5;border-radius:8px;padding:12px;margin-bottom:12px">' +
       '<b>' + esc_(t.soHieu || 'Văn bản chưa có số ký hiệu') + '</b>' +
@@ -908,13 +914,14 @@ function emailVanBanMoi_(cfg, tasks) {
       '<div><b>Cơ quan ban hành:</b> ' + esc_(t.coQuan || 'Chưa điền') + '</div>' +
       '<div><b>Ngày ban hành:</b> ' + esc_(t.ngayBanHanh || 'Chưa điền') + '</div>' +
       '<div><b>Phòng chủ trì:</b> ' + esc_(t.chuTri || 'Chưa điền') + '</div>' +
+      (t.vaiTro ? '<div><b>Vai trò phòng:</b> ' + esc_(t.vaiTro) + '</div>' : '') +
       '<div><b>Người tham mưu:</b> ' + esc_(t.nguoi || 'Chưa điền') + '</div>' +
-      '<div style="margin-top:8px"><b>Hạn hoàn thành: ' + esc_(t.han) + '</b> — ' + tinhTrang_(t.conLai) + '</div></div>';
+      '<div style="margin-top:8px"><b>Hạn hoàn thành: ' + esc_(t.han || 'Chưa xác định') + '</b>' + (t.conLai === null ? '' : ' — ' + tinhTrang_(t.conLai)) + '</div></div>';
   });
   content += '<p>Thông báo này gửi khi phát hiện nhiệm vụ mới. Email nhắc hạn hằng ngày và Google Calendar vẫn hoạt động theo cấu hình riêng.</p>';
   var safeCfg = Object.assign({}, cfg);
   if (!/^https?:\/\//i.test(safeCfg.linkDashboard || '')) safeCfg.linkDashboard = '';
-  return khungEmail_(safeCfg, 'Văn bản mới có thời hạn', content);
+  return khungEmail_(safeCfg, 'Nhiệm vụ mới', content);
 }
 
 // CHẠY MỘT LẦN để cấp quyền và lấy dữ liệu hiện có làm mốc; cài lại không gửi lại dữ liệu đã báo.
@@ -966,9 +973,9 @@ function chayBaoVanBanMoi() {
     for (var i = 0; i < tasks.length; i += 30) {
       if (MailApp.getRemainingDailyQuota() < 1) throw new Error('Hết hạn mức gửi email hôm nay; các nhiệm vụ chưa gửi được giữ để thử lại.');
       var batch = tasks.slice(i, i + 30);
-      var subject = '[VĂN BẢN MỚI] ' + batch.length + ' nhiệm vụ có thời hạn — ' + cfg.tenDonVi;
+      var subject = '[VĂN BẢN MỚI] ' + batch.length + ' nhiệm vụ mới — ' + cfg.tenDonVi;
       var body = batch.map(function (t) { return [t.soHieu, t.trichYeu, t.nhiemVu, 'Cơ quan ban hành: ' + t.coQuan,
-        'Hạn hoàn thành: ' + t.han, 'Người tham mưu: ' + t.nguoi].filter(Boolean).join('\n'); }).join('\n\n');
+        t.vaiTro ? 'Vai trò phòng: ' + t.vaiTro : '', 'Hạn hoàn thành: ' + (t.han || 'Chưa xác định'), 'Người tham mưu: ' + t.nguoi].filter(Boolean).join('\n'); }).join('\n\n');
       MailApp.sendEmail({to: cfg.emailVanBanMoi, subject: subject, body: body, htmlBody: emailVanBanMoi_(cfg, batch), name: 'Điều hành nhiệm vụ — ' + cfg.tenDonVi});
       sent++; notified += batch.length;
       var at = Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss');
@@ -978,7 +985,7 @@ function chayBaoVanBanMoi() {
     }
     props.setProperty('NEW_DOCUMENT_LAST_CHECK', Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss'));
     props.deleteProperty('NEW_DOCUMENT_LAST_ERROR');
-    if (sent) ghiNhatKy_('Báo văn bản mới', sent, notified, 'Đã báo nhiệm vụ mới có thời hạn tới ' + cfg.emailVanBanMoi);
+    if (sent) ghiNhatKy_('Báo văn bản mới', sent, notified, 'Đã báo nhiệm vụ mới tới ' + cfg.emailVanBanMoi);
     return {ok: true, version: SCRIPT_VERSION, sent: sent, notified: notified};
   } catch (err) {
     var msg = String(err && err.message || err);

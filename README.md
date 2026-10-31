@@ -16,7 +16,7 @@ Gmail báo nhiệm vụ mới được đưa vào Google Sheet; Google Calendar 
 ### Quy tắc xử lý
 
 - Dữ liệu đã có lúc cài lần đầu làm mốc và không được báo là văn bản mới.
-- Dòng mới có ngày thực ở J và chưa có K/L được gửi thư. Không phụ thuộc mốc báo trước 3 ngày của email nhắc hạn hằng ngày; báo mới chạy cả cuối tuần.
+- Dòng mới có ngày thực ở J và chưa có K/L được gửi thư. Dòng có cột **Vai trò phòng** là «Phòng chủ trì» (kể cả dữ liệu cũ «Phòng tham mưu») hoặc «Cá nhân tham mưu» — việc ứng dụng quét iOffice ghi từ văn bản đến chuyển tới tài khoản người dùng, bút phê giao thẳng thành viên trong phòng, văn bản đi của Sở — được gửi thư **ngay cả khi chưa có hạn** (email ghi «Hạn hoàn thành: Chưa xác định»); «Phòng phối hợp» không gửi. Không phụ thuộc mốc báo trước 3 ngày của email nhắc hạn hằng ngày; báo mới chạy cả cuối tuần.
 - Dòng mới chưa điền hạn hoặc ngày sai (ví dụ `31/02/2026`) chờ bổ sung/sửa ngày; không gửi thư lúc đó. Dòng cũ được sửa hạn không được coi là dòng mới.
 - Nhiều nhiệm vụ mới cùng lượt quét được gộp tối đa 30 nhiệm vụ/email. Email có số ký hiệu, cơ quan/ngày ban hành, nội dung, phòng chủ trì, người tham mưu và hạn hoàn thành.
 - Cột **Mã thông báo văn bản mới** được thêm sau các cột đang có, không dịch A–O, và ẩn. Tab **Theo dõi báo văn bản mới** lưu các dòng đã gửi. Giữ mã này khi công cụ tự động cập nhật hoặc sắp xếp dòng; xóa nhiệm vụ bằng xóa hẳn dòng.

@@ -63,4 +63,30 @@ test('partial quota failure retries only the unsent portion',()=>{const e=setup(
 test('a copied row receives its own notification identity',()=>{const e=setup();e.sheet.appendRow(task('New','20/10/2026'));e.ctx.chayBaoVanBanMoi();e.sheet.appendRow(e.sheet.data[1].slice());assert.equal(e.ctx.chayBaoVanBanMoi().notified,1);assert.notEqual(e.sheet.data[1][15],e.sheet.data[2][15]);});
 test('missing configured sheet does not fall back and send from another tab',()=>{const e=setup();e.sheets.splice(e.sheets.indexOf(e.sheet),1);assert.equal(e.ctx.chayBaoVanBanMoi().ok,false);assert.equal(e.mails.length,0);});
 test('unfinished template rows containing only STT are ignored',()=>{const e=setup();e.sheet.appendRow(['99']);assert.equal(e.ctx.chayBaoVanBanMoi().sent,0);assert.equal(e.sheet.data[1][15],undefined);});
+function envVaiTro(initial=[]){
+  const e=env(initial);
+  e.sheet.data[0]=[...headers,'Vai trò phòng'];
+  return e;
+}
+const taskVT=(name,due,vt,extra={})=>{const r=task(name,due,extra);r[15]=vt;return r;};
+test('việc giao Phòng chủ trì / cá nhân (cột Vai trò phòng) được báo ngay cả khi chưa có hạn; phối hợp không báo',()=>{
+  const e=envVaiTro();assert.equal(e.ctx.caiDatBaoVanBanMoi().ok,true);
+  e.sheet.appendRow(taskVT('Phong chu tri chua han','','Phòng chủ trì'));
+  e.sheet.appendRow(taskVT('Ca nhan khong han','Không yêu cầu thời hạn','Cá nhân tham mưu'));
+  e.sheet.appendRow(taskVT('Phoi hop','20/11/2026','Phòng phối hợp'));
+  e.sheet.appendRow(task('Nhap tay chua han',''));
+  const r=e.ctx.chayBaoVanBanMoi();
+  assert.equal(r.notified,2);assert.equal(e.mails.length,1);
+  assert.match(e.mails[0].subject,/2 nhiệm vụ mới/);
+  assert.match(e.mails[0].htmlBody,/Phong chu tri chua han/);assert.match(e.mails[0].htmlBody,/Vai trò phòng:<\/b> Phòng chủ trì/);
+  assert.match(e.mails[0].htmlBody,/Hạn hoàn thành: Chưa xác định/);
+  assert.doesNotMatch(e.mails[0].htmlBody,/Phoi hop|Nhap tay chua han/);
+  assert.equal(e.ctx.chayBaoVanBanMoi().sent,0,'không gửi lại; phối hợp đã đánh dấu bỏ qua');
+});
+test('dữ liệu cũ «Phòng tham mưu» được báo và hiển thị là Phòng chủ trì',()=>{
+  const e=envVaiTro();e.ctx.caiDatBaoVanBanMoi();
+  e.sheet.appendRow(taskVT('Tham muu cu','20/11/2026','Phòng tham mưu'));
+  assert.equal(e.ctx.chayBaoVanBanMoi().notified,1);
+  assert.match(e.mails[0].htmlBody,/Vai trò phòng:<\/b> Phòng chủ trì/);
+});
 console.log(`${count} tests passed`);
