@@ -101,7 +101,8 @@ test('member list text round-trips and invalid stored config falls back to defau
   const parsed = core.parseMembers('Lâm | Lê Tùng Lâm | Tùng Lâm\nKiên | Nguyễn Văn Kiên\n\n | bỏ dòng thiếu tên');
   assert.deepEqual(JSON.parse(JSON.stringify(parsed)), [{ten: 'Lâm', hoTen: 'Lê Tùng Lâm', biDanh: ['Tùng Lâm']}, {ten: 'Kiên', hoTen: 'Nguyễn Văn Kiên', biDanh: []}]);
   assert.deepEqual(JSON.parse(JSON.stringify(core.parseMembers(core.formatMembers(parsed)))), JSON.parse(JSON.stringify(parsed)));
-  assert.equal(core.sanitizeConfig(null).members.length, 8);
+  assert.equal(core.sanitizeConfig(null).members.length, 9);
+  assert.equal(core.resolveMember('Thương', core.DEFAULT_CONFIG.members), 'Thương', 'Thương có trong danh sách mặc định, không rơi vào «Khác»');
   assert.equal(core.sanitizeConfig({members: parsed, me: 'Không có'}).me, 'Lâm');
 });
 test('dashboard plumbs role field through sync, import, modal and KHTC page', () => {
