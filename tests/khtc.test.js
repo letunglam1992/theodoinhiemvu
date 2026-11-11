@@ -105,6 +105,18 @@ test('member list text round-trips and invalid stored config falls back to defau
   assert.equal(core.resolveMember('Thương', core.DEFAULT_CONFIG.members), 'Thương', 'Thương có trong danh sách mặc định, không rơi vào «Khác»');
   assert.equal(core.sanitizeConfig({members: parsed, me: 'Không có'}).me, 'Lâm');
 });
+test('Danh bạ là danh sách gốc: thêm người mới, bổ sung họ tên, không thêm lại người đã xóa tay; ping chuyển Danh bạ vào trang KHTC', () => {
+  const c0 = core.sanitizeConfig({members: [{ten: 'Lâm', hoTen: 'Lê Tùng Lâm', biDanh: ['Tùng Lâm']}, {ten: 'Thư', hoTen: '', biDanh: []}], me: 'Lâm'});
+  const k1 = core.mergeContacts(c0, ['Kiều Thị Thư', 'Trần Huyền Thương', 'Tùng Lâm', 'Lê Tùng Lâm', 'Nga', '', 'Chưa phân công']);
+  assert.deepEqual(JSON.parse(JSON.stringify(k1.config.members.map(m => [m.ten, m.hoTen]))), [['Lâm', 'Lê Tùng Lâm'], ['Thư', 'Kiều Thị Thư'], ['Thương', 'Trần Huyền Thương'], ['Nga', '']]);
+  assert.equal(k1.added.length, 3);
+  assert.equal(core.resolveMember('Trần Huyền Thương', k1.config.members), 'Thương');
+  const xoa = core.sanitizeConfig({members: k1.config.members.filter(m => m.ten !== 'Nga'), me: 'Lâm', daGop: k1.config.daGop});
+  const k2 = core.mergeContacts(xoa, ['Nga', 'Hòa']);
+  assert.deepEqual(JSON.parse(JSON.stringify(k2.added)), ['Hòa']);
+  assert.match(html, /Array\.isArray\(j\.thanhVien\) && typeof khtcNhanDanhBa === 'function'/);
+  assert.match(html, /daGop: KHTC_CFG\.daGop/);
+});
 test('dashboard plumbs role field through sync, import, modal and KHTC page', () => {
   assert.match(html, /const SYNC_FIELDS = \[[^\]]*'vai_tro_phong'\]/);
   assert.match(html, /key:'vai_tro_phong', label:'Vai trò phòng'/);

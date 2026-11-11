@@ -32,6 +32,9 @@
  *     Muốn kiểm tra thủ công: chạy "chayBaoVanBanMoi"; muốn dừng: chạy "huyBaoVanBanMoi".
  *     Văn bản trình: ứng dụng quét iOffice ghi các văn bản đi người khác trình anh/chị (mục "VB chờ xử lý") vào tab
  *     "Văn bản trình" (mã này tự tạo tab ở lần quét đầu); cùng lịch 5 phút này gửi email cho các dòng chưa có "Đã báo email" tới "Email nhận văn bản mới".
+ *     Văn bản trình tồn quá N ngày chưa xử lý được nhắc mỗi ngày một email; N đặt ở dòng "Số ngày nhắc văn bản trình tồn"
+ *     của sheet "Cấu hình nhắc hạn" (tự thêm dòng này nếu thiếu: Tham số | Giá trị; mặc định 2, đặt 0 để tắt).
+ *     Tab "Danh bạ" là danh sách thành viên gốc: dashboard và ứng dụng quét tự lấy tên từ đây.
  *  9. Nhiệm vụ Phòng KHTC theo thành viên: chạy "caiDatTheoDoiKHTC" một lần. Hàm thêm cột P "Vai trò phòng"
  *     ngay sau cột Ghi chú (O), tạo tab "Cau hinh quet KHTC" (từ khóa + thành viên, tự sửa được) và tab chỉ xem
  *     "Theo doi phong KHTC" (tổng hợp theo thành viên bằng công thức). Chạy lại không ghi đè dữ liệu đã có.
@@ -73,7 +76,7 @@ var CAU_HINH = {
 // Giá trị mặc định khi sheet "Cấu hình nhắc hạn" chưa có / để trống ô
 var MAC_DINH_NHAC_HAN = {
   soNgayBaoTruoc: 3, guiQuaHan: true, gioGui: 7, emailLanhDao: '',
-  chiNgayLamViec: true, tenDonVi: 'Đơn vị', linkDashboard: '', emailVanBanMoi: ''
+  chiNgayLamViec: true, tenDonVi: 'Đơn vị', linkDashboard: '', emailVanBanMoi: '', soNgayNhacTrinh: 2
 };
 // =====================================================================
 
@@ -233,7 +236,14 @@ function actionPing_(bang) {
   var n = 0;
   for (var r = bang.headerRow + 1; r <= bang.values.length; r++) if (dongCoDuLieu_(bang, r)) n++;
   return {ok: true, version: SCRIPT_VERSION, sheetName: bang.sheet.getName(), sheetId: bang.sheet.getSheetId(),
-          headerRow: bang.headerRow, dataRows: n, headersFound: bang.headersFound, missingHeaders: bang.missingHeaders};
+          headerRow: bang.headerRow, dataRows: n, headersFound: bang.headersFound, missingHeaders: bang.missingHeaders,
+          thanhVien: tenTrongDanhBa_()};
+}
+// Tab "Danh bạ" là danh sách gốc dùng chung: dashboard (trang Phòng KHTC), ứng dụng quét iOffice và email đều lấy tên từ đây.
+function tenTrongDanhBa_() {
+  var db = docDanhBa_(), out = [];
+  Object.keys(db).forEach(function (k) { if (!/^nguyen van a$/.test(khongDau_(db[k].ten))) out.push(db[k].ten); });
+  return out.slice(0, 60);
 }
 
 function actionUpdate_(bang, items) {
@@ -544,6 +554,7 @@ function docCauHinhNhacHan_() {
     else if (k.indexOf('gio gui') === 0) { var h = parseInt(v, 10); if (!isNaN(h) && h >= 0 && h <= 23) cfg.gioGui = h; }
     else if (k.indexOf('email lanh dao') === 0) cfg.emailLanhDao = v;
     else if (k === 'email nhan van ban moi') cfg.emailVanBanMoi = v;
+    else if (k.indexOf('so ngay nhac van ban trinh') === 0) { var nt = parseInt(v, 10); if (!isNaN(nt) && nt >= 0) cfg.soNgayNhacTrinh = nt; }
     else if (k.indexOf('chi gui ngay lam viec') === 0) cfg.chiNgayLamViec = co(v, cfg.chiNgayLamViec);
     else if (k.indexOf('ten don vi') === 0) { if (v) cfg.tenDonVi = v; }
     else if (k.indexOf('duong link dashboard') === 0 || k.indexOf('link dashboard') === 0) cfg.linkDashboard = v;
@@ -990,11 +1001,13 @@ function chayBaoVanBanMoi() {
     var rieng = baoNguoiDuocGiao_(bang, reg, cfg, props, gid);
     var trinh = baoVanBanTrinh_(cfg);
     if (trinh.sent) ghiNhatKy_('Báo văn bản trình', trinh.sent, trinh.notified, 'Đã báo văn bản trình tới ' + cfg.emailVanBanMoi);
+    var ton = nhacVanBanTrinhTon_(cfg, props);
+    if (ton.sent) ghiNhatKy_('Nhắc văn bản trình tồn', ton.sent, ton.notified, 'Đã nhắc văn bản trình tồn tới ' + cfg.emailVanBanMoi);
     props.setProperty('NEW_DOCUMENT_LAST_CHECK', Utilities.formatDate(new Date(), CAU_HINH.MUI_GIO, 'dd/MM/yyyy HH:mm:ss'));
     props.deleteProperty('NEW_DOCUMENT_LAST_ERROR');
     if (sent) ghiNhatKy_('Báo văn bản mới', sent, notified, 'Đã báo nhiệm vụ mới tới ' + cfg.emailVanBanMoi);
     if (rieng.sent) ghiNhatKy_('Báo người được giao', rieng.sent, rieng.notified, 'Đã báo việc mới tới: ' + rieng.nguoi.join(', '));
-    return {ok: true, version: SCRIPT_VERSION, sent: sent, notified: notified, nguoiDuocGiao: rieng, vanBanTrinh: trinh};
+    return {ok: true, version: SCRIPT_VERSION, sent: sent, notified: notified, nguoiDuocGiao: rieng, vanBanTrinh: trinh, vanBanTrinhTon: ton};
   } catch (err) {
     var msg = String(err && err.message || err);
     props.setProperty('NEW_DOCUMENT_LAST_ERROR', msg);
@@ -1004,7 +1017,7 @@ function chayBaoVanBanMoi() {
 }
 
 // ---------- Văn bản trình: văn bản đi người khác trình (iOffice "VB chờ xử lý") — do ứng dụng quét ghi vào tab riêng ----------
-// Cột: A Mã | B Ngày nhận | C Người trình | D Phòng soạn | E Loại văn bản | F Trích yếu | G Link iOffice | H Ghi lúc | I Đã báo email.
+// Cột: A Mã | B Ngày nhận | C Người trình | D Phòng soạn | E Loại văn bản | F Trích yếu | G Link iOffice | H Ghi lúc | I Đã báo email | J Đã xử lý.
 // Chỉ gửi dòng có Mã và cột I còn trống; gửi xong ghi thời điểm vào cột I (không gửi lại).
 var TEN_TAB_VAN_BAN_TRINH = 'Văn bản trình';
 function docVanBanTrinhChuaBao_(sh) {
@@ -1030,11 +1043,16 @@ function emailVanBanTrinh_(cfg, ds) {
   if (!/^https?:\/\//i.test(safeCfg.linkDashboard || '')) safeCfg.linkDashboard = '';
   return khungEmail_(safeCfg, 'Văn bản trình chờ xử lý', content);
 }
-var COT_VAN_BAN_TRINH = ['Mã', 'Ngày nhận', 'Người trình', 'Phòng soạn', 'Loại văn bản', 'Trích yếu', 'Link iOffice', 'Ghi lúc', 'Đã báo email'];
+var COT_VAN_BAN_TRINH = ['Mã', 'Ngày nhận', 'Người trình', 'Phòng soạn', 'Loại văn bản', 'Trích yếu', 'Link iOffice', 'Ghi lúc', 'Đã báo email', 'Đã xử lý'];
 // Ứng dụng quét chỉ ghi giá trị, không tạo tab → mã này tạo tab (một lần) để ứng dụng có chỗ ghi.
 function taoTabVanBanTrinhNeuThieu_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(TEN_TAB_VAN_BAN_TRINH);
-  if (sh) return sh;
+  if (sh) {
+    // Tab tạo ở bản trước chưa có cột J "Đã xử lý" (ứng dụng quét ghi khi văn bản rời mục chờ xử lý) → bổ sung tiêu đề.
+    if (sh.getMaxColumns() < COT_VAN_BAN_TRINH.length) sh.insertColumnsAfter(sh.getMaxColumns(), COT_VAN_BAN_TRINH.length - sh.getMaxColumns());
+    if (!String(sh.getRange(1, 10).getDisplayValues()[0][0]).trim()) sh.getRange(1, 10).setValue(COT_VAN_BAN_TRINH[9]);
+    return sh;
+  }
   sh = ss.insertSheet(TEN_TAB_VAN_BAN_TRINH);
   sh.getRange(1, 1, 1, COT_VAN_BAN_TRINH.length).setValues([COT_VAN_BAN_TRINH]);
   sh.setFrozenRows(1);
@@ -1055,6 +1073,51 @@ function baoVanBanTrinh_(cfg) {
     sent++; notified += batch.length;
   }
   return {sent: sent, notified: notified};
+}
+
+// Nhắc văn bản trình TỒN: mỗi ngày một email (từ giờ gửi nhắc hạn; bỏ T7/CN nếu cấu hình chỉ ngày làm việc) liệt kê các văn bản
+// trình nhận từ N ngày trước trở về trước mà cột J "Đã xử lý" còn trống. N = "Số ngày nhắc văn bản trình tồn" (mặc định 2; 0 = tắt).
+function vanBanTrinhTon_(sh, soNgay, homNay) {
+  if (!sh || sh.getLastRow() < 2 || !(soNgay > 0)) return [];
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, 10).getDisplayValues(), out = [];
+  rows.forEach(function (r) {
+    if (!String(r[0]).trim() || String(r[9]).trim()) return;
+    var nhan = parseNgay_(String(r[1]).split(' ')[0]);
+    if (nhan === null) return;
+    var ton = Math.round((homNay - nhan) / 86400000);
+    if (ton >= soNgay) out.push({ma: r[0], ngayNhan: r[1], nguoi: r[2], phong: r[3], loai: r[4], trichYeu: r[5], link: r[6], ton: ton});
+  });
+  return out.sort(function (a, b) { return b.ton - a.ton; });
+}
+function nhacVanBanTrinhTon_(cfg, props) {
+  if (!(cfg.soNgayNhacTrinh > 0)) return {sent: 0, notified: 0};
+  var now = new Date(), tz = CAU_HINH.MUI_GIO;
+  var ngay = Utilities.formatDate(now, tz, 'yyyy-MM-dd'), gio = +Utilities.formatDate(now, tz, 'H'), thu = +Utilities.formatDate(now, tz, 'u');
+  if (props.getProperty('TRINH_TON_NGAY') === ngay || gio < cfg.gioGui || (cfg.chiNgayLamViec && thu >= 6)) return {sent: 0, notified: 0};
+  var p = ngay.split('-'), homNay = Date.UTC(+p[0], +p[1] - 1, +p[2]);
+  var ds = vanBanTrinhTon_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TEN_TAB_VAN_BAN_TRINH), cfg.soNgayNhacTrinh, homNay);
+  if (ds.length) {
+    if (MailApp.getRemainingDailyQuota() < 1) throw new Error('Hết hạn mức gửi email hôm nay; chưa nhắc được văn bản trình tồn.');
+    var content = '<p>Còn <b>' + ds.length + ' văn bản trình</b> chờ anh/chị xử lý từ ' + cfg.soNgayNhacTrinh + ' ngày trở lên (iOffice: Văn bản đi → VB chờ xử lý).</p>' +
+        '<table style="border-collapse:collapse;width:100%"><tr><th align="left" style="padding:6px;border-bottom:2px solid #e3e0d5">Người trình</th>' +
+        '<th align="left" style="padding:6px;border-bottom:2px solid #e3e0d5">Trích yếu</th><th align="left" style="padding:6px;border-bottom:2px solid #e3e0d5">Nhận</th>' +
+        '<th align="right" style="padding:6px;border-bottom:2px solid #e3e0d5">Tồn</th></tr>';
+    ds.slice(0, 40).forEach(function (t) {
+      var ty = /^https:\/\//i.test(t.link) ? '<a href="' + esc_(t.link) + '">' + esc_(catNgan_(t.trichYeu, 160)) + '</a>' : esc_(catNgan_(t.trichYeu, 160));
+      content += '<tr><td style="padding:6px;border-bottom:1px solid #eee">' + esc_(t.nguoi) + '</td><td style="padding:6px;border-bottom:1px solid #eee">' + ty + '</td>' +
+          '<td style="padding:6px;border-bottom:1px solid #eee;white-space:nowrap">' + esc_(t.ngayNhan) + '</td>' +
+          '<td align="right" style="padding:6px;border-bottom:1px solid #eee;white-space:nowrap"><b>' + t.ton + ' ngày</b></td></tr>';
+    });
+    content += '</table>' + (ds.length > 40 ? '<p>… và ' + (ds.length - 40) + ' văn bản khác.</p>' : '') +
+        '<p>Văn bản đã ký/chuyển/trả lại sẽ tự hết nhắc sau lượt quét kế tiếp của ứng dụng. Tắt nhắc: đặt "Số ngày nhắc văn bản trình tồn" = 0 trong sheet "Cấu hình nhắc hạn".</p>';
+    var safeCfg = Object.assign({}, cfg);
+    if (!/^https?:\/\//i.test(safeCfg.linkDashboard || '')) safeCfg.linkDashboard = '';
+    MailApp.sendEmail({to: cfg.emailVanBanMoi, subject: '[VĂN BẢN TRÌNH TỒN] ' + ds.length + ' văn bản chờ xử lý, lâu nhất ' + ds[0].ton + ' ngày — ' + cfg.tenDonVi,
+      body: ds.map(function (t) { return t.ton + ' ngày — Đ/c ' + t.nguoi + ': ' + t.trichYeu; }).join('\n'),
+      htmlBody: khungEmail_(safeCfg, 'Văn bản trình tồn', content), name: 'Điều hành nhiệm vụ — ' + cfg.tenDonVi});
+  }
+  props.setProperty('TRINH_TON_NGAY', ngay);
+  return {sent: ds.length ? 1 : 0, notified: ds.length};
 }
 
 // ---------- Báo riêng người được giao (cột M) — email lấy ở tab Danh bạ ----------

@@ -123,7 +123,7 @@ test('văn bản trình: tab «Văn bản trình» do ứng dụng quét ghi →
   assert.deepEqual(JSON.parse(JSON.stringify(e.ctx.chayBaoVanBanMoi().vanBanTrinh)), {sent: 0, notified: 0});
   const tab = e.ss.getSheetByName('Văn bản trình');
   assert.ok(tab, 'lần quét đầu tự tạo tab để ứng dụng quét có chỗ ghi');
-  assert.equal(tab.data[0].join('|'), 'Mã|Ngày nhận|Người trình|Phòng soạn|Loại văn bản|Trích yếu|Link iOffice|Ghi lúc|Đã báo email');
+  assert.equal(tab.data[0].join('|'), 'Mã|Ngày nhận|Người trình|Phòng soạn|Loại văn bản|Trích yếu|Link iOffice|Ghi lúc|Đã báo email|Đã xử lý');
   tab.appendRow(['1:11','11/11/2026','Trần Huyền Thương','Phòng Kế hoạch - Tài chính','Công văn','Phiếu ghi ý kiến thành viên UBND tỉnh <b>2417/VPUB-THKT</b>','https://stnmtsonla.vnptioffice.vn/van-ban-di/xem-van-ban-di-chi-tiet?id=1&xld=11','11/11/2026 09:00','']);
   tab.appendRow(['2:21','06/11/2026','Vương Quốc Hòa','','','V/v triển khai kết luận','javascript:alert(1)','x','05/11/2026 10:00:00']);
   const r = e.ctx.chayBaoVanBanMoi();
@@ -138,5 +138,31 @@ test('văn bản trình: tab «Văn bản trình» do ứng dụng quét ghi →
   e.ctx.failMail = true; assert.equal(e.ctx.chayBaoVanBanMoi().ok, false); assert.equal(tab.data[3][8], '');
   e.ctx.failMail = false; assert.equal(e.ctx.chayBaoVanBanMoi().vanBanTrinh.notified, 2);
   assert.match(e.mails[1].subject, /2 văn bản chờ xử lý/); assert.doesNotMatch(e.mails[1].htmlBody, /javascript:/);
+});
+test('văn bản trình tồn: mỗi ngày một email cho dòng nhận từ N ngày chưa có «Đã xử lý»; cột J tự bổ sung; 0 = tắt; ping trả tên trong Danh bạ', () => {
+  const e = setup();
+  e.ctx.chayBaoVanBanMoi();
+  const tab = e.ss.getSheetByName('Văn bản trình');
+  assert.equal(tab.data[0][9], 'Đã xử lý');
+  const ngay = n => { const d = new Date(Date.now() - n * 86400000); return new Intl.DateTimeFormat('en-GB', {timeZone: 'Asia/Ho_Chi_Minh'}).format(d); };
+  tab.appendRow(['1:11', ngay(5), 'Trần Huyền Thương', '', '', 'Phiếu ghi ý kiến', 'https://stnmtsonla.vnptioffice.vn/x', 'x', 'đã báo', '']);
+  tab.appendRow(['2:21', ngay(9), 'Vương Quốc Hòa', '', '', 'Đã ký rồi', '', 'x', 'đã báo', '10/11/2026 08:00']);
+  tab.appendRow(['3:31', ngay(0), 'Kiều Thị Thư', '', '', 'Mới trình hôm nay', '', 'x', 'đã báo', '']);
+  const cfg = JSON.parse(JSON.stringify(e.ctx.docCauHinhNhacHan_())); cfg.emailVanBanMoi = 'owner@example.com'; cfg.gioGui = 0; cfg.chiNgayLamViec = false;
+  const props = e.ctx.PropertiesService.getScriptProperties();
+  props.deleteProperty('TRINH_TON_NGAY'); // lượt 5 phút đầu ngày có thể đã chốt «hôm nay không có tồn»
+  const r = e.ctx.nhacVanBanTrinhTon_(cfg, props);
+  assert.equal(r.notified, 1); assert.equal(e.mails.length, 1);
+  assert.match(e.mails[0].subject, /^\[VĂN BẢN TRÌNH TỒN\] 1 văn bản chờ xử lý, lâu nhất 5 ngày/);
+  assert.match(e.mails[0].htmlBody, /Trần Huyền Thương/); assert.doesNotMatch(e.mails[0].htmlBody, /Đã ký rồi|Mới trình hôm nay/);
+  assert.equal(e.ctx.nhacVanBanTrinhTon_(cfg, props).sent, 0, 'mỗi ngày một lần');
+  props.deleteProperty('TRINH_TON_NGAY'); cfg.soNgayNhacTrinh = 0;
+  assert.equal(e.ctx.nhacVanBanTrinhTon_(cfg, props).sent, 0);
+  // tab cũ 9 cột → bổ sung tiêu đề J
+  tab.data[0][9] = ''; e.ctx.taoTabVanBanTrinhNeuThieu_(); assert.equal(tab.data[0][9], 'Đã xử lý');
+  // Danh bạ → ping
+  const db = e.ss.getSheetByName('Danh bạ'); db.appendRow(['Trần Huyền Thương', 'thuong@example.com', 'Có', '']);
+  const tv = JSON.parse(JSON.stringify(e.ctx.tenTrongDanhBa_()));
+  assert.deepEqual(tv, ['Trần Huyền Thương'], 'bỏ dòng ví dụ «Nguyễn Văn A»');
 });
 console.log(`${count} tests passed`);
