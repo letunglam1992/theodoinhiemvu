@@ -118,4 +118,25 @@ test('báo riêng người được giao (cột M, email ở Danh bạ): giao m�
   e.sheet.appendRow(taskVT('Viec da xong','','Phòng chủ trì',{12:'Kiên',10:'12/BC'}));
   e.ctx.chayBaoVanBanMoi();assert.ok(!e.mails.some(m=>m.to==='kien@example.com'));
 });
+test('văn bản trình: tab «Văn bản trình» do ứng dụng quét ghi → báo một lần tới email nhận văn bản mới, ghi «Đã báo email»; tab tự tạo khi thiếu', () => {
+  const e = setup();
+  assert.deepEqual(JSON.parse(JSON.stringify(e.ctx.chayBaoVanBanMoi().vanBanTrinh)), {sent: 0, notified: 0});
+  const tab = e.ss.getSheetByName('Văn bản trình');
+  assert.ok(tab, 'lần quét đầu tự tạo tab để ứng dụng quét có chỗ ghi');
+  assert.equal(tab.data[0].join('|'), 'Mã|Ngày nhận|Người trình|Phòng soạn|Loại văn bản|Trích yếu|Link iOffice|Ghi lúc|Đã báo email');
+  tab.appendRow(['1:11','11/11/2026','Trần Huyền Thương','Phòng Kế hoạch - Tài chính','Công văn','Phiếu ghi ý kiến thành viên UBND tỉnh <b>2417/VPUB-THKT</b>','https://stnmtsonla.vnptioffice.vn/van-ban-di/xem-van-ban-di-chi-tiet?id=1&xld=11','11/11/2026 09:00','']);
+  tab.appendRow(['2:21','06/11/2026','Vương Quốc Hòa','','','V/v triển khai kết luận','javascript:alert(1)','x','05/11/2026 10:00:00']);
+  const r = e.ctx.chayBaoVanBanMoi();
+  assert.equal(r.ok, true); assert.equal(r.vanBanTrinh.notified, 1);
+  assert.equal(e.mails.length, 1); assert.equal(e.mails[0].to, 'owner@example.com');
+  assert.match(e.mails[0].subject, /^\[VĂN BẢN TRÌNH\] Đ\/c Trần Huyền Thương: Phiếu ghi ý kiến/);
+  assert.match(e.mails[0].htmlBody, /Đ\/c Trần Huyền Thương trình/); assert.match(e.mails[0].htmlBody, /&lt;b&gt;2417/); assert.match(e.mails[0].htmlBody, /Mở trên iOffice/);
+  assert.match(tab.data[1][8], /^\d{2}\/\d{2}\/\d{4} /);
+  assert.equal(e.ctx.chayBaoVanBanMoi().vanBanTrinh.sent, 0); assert.equal(e.mails.length, 1);
+  tab.appendRow(['3:31','11/11/2026','Kiều Thị Thư','','','Tờ trình A','javascript:alert(1)','x','']);
+  tab.appendRow(['4:41','11/11/2026','Lò Thị Nga','','','Tờ trình B','','x','']);
+  e.ctx.failMail = true; assert.equal(e.ctx.chayBaoVanBanMoi().ok, false); assert.equal(tab.data[3][8], '');
+  e.ctx.failMail = false; assert.equal(e.ctx.chayBaoVanBanMoi().vanBanTrinh.notified, 2);
+  assert.match(e.mails[1].subject, /2 văn bản chờ xử lý/); assert.doesNotMatch(e.mails[1].htmlBody, /javascript:/);
+});
 console.log(`${count} tests passed`);
